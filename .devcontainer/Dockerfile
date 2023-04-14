@@ -10,7 +10,7 @@ RUN echo "deb https://apt.llvm.org/buster llvm-toolchain-buster-16 main" \
     wget -qO /etc/apt/trusted.gpg.d/llvm.asc \
         https://apt.llvm.org/llvm-snapshot.gpg.key && \
     apt-get -qq update && \
-    apt-get install -qqy -t llvm-toolchain-buster-16 clang-16 clang-tidy-16 clang-format-16 lld-16 && \
+    apt-get install -qqy -t llvm-toolchain-buster-16 clang-16 clang-tidy-16 clang-format-16 lld-16 libpolly-16-dev libz-dev && \
     for f in /usr/lib/llvm-16/bin/*; do ln -sf "$f" /usr/bin; done && \
     rm -rf /var/lib/apt/lists/*
 
