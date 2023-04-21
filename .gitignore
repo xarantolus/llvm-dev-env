@@ -5,3 +5,5 @@ spec.md
 *.o
 *.ll
 *.bc
+output
+*.bin

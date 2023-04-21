@@ -3,6 +3,7 @@ use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
 use inkwell::targets::{InitializationConfig, Target, TargetMachine};
+use inkwell::types::FunctionType;
 use inkwell::OptimizationLevel;
 use std::error::Error;
 use std::path::Path;
@@ -31,6 +32,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let function = module.add_function("main", fn_type, None);
     let basic_block = context.append_basic_block(function, "entry");
 
+    // TODO: https://thedan64.github.io/inkwell/inkwell/context/struct.Context.html#method.create_inline_asm
+
     builder.position_at_end(basic_block);
     builder.build_return(Some(&context.i32_type().const_int(0, false)));
 
@@ -52,12 +55,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("Target triple: {}", target_triple);
 
-    machine.write_to_file(
-        &module,
-        inkwell::targets::FileType::Object,
-        Path::new("example.o"),
-    )?;
-
     let pass_manager_builder = inkwell::passes::PassManagerBuilder::create();
     pass_manager_builder.set_optimization_level(OptimizationLevel::Aggressive);
     let pass_manager = inkwell::passes::PassManager::create(());
@@ -67,6 +64,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     pass_manager.run_on(&module);
 
     module.write_bitcode_to_path(Path::new("example.bc"));
+
+    machine.write_to_file(
+        &module,
+        inkwell::targets::FileType::Object,
+        Path::new("example.o"),
+    )?;
+
+    // ld -nostdlib -nodefaultlibs -e main example.o -o output
+    std::process::Command::new("ld")
+        .args(&[
+            "-nostdlib",
+            "-nodefaultlibs",
+            "-e",
+            "main",
+            "example.o",
+            "-o",
+            "output",
+        ])
+        .output()?;
 
     Ok(())
 }
