@@ -1,7 +1,4 @@
-use inkwell::{
-    targets::{FileType, InitializationConfig, Target, TargetMachine},
-    OptimizationLevel,
-};
+use inkwell::targets::{FileType, InitializationConfig, Target, TargetMachine};
 use std::{error::Error, path::Path};
 
 use inkwell::module::Module;

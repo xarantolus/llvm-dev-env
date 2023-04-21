@@ -2,11 +2,8 @@ mod compiler;
 
 use inkwell::context::Context;
 
-use inkwell::module::Module;
-use inkwell::OptimizationLevel;
 use llvm_test::compiler::{compile_options::CompileOptions, target::CompileTarget};
 use std::error::Error;
-use std::path::Path;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = CompileOptions::parse_args()?;
