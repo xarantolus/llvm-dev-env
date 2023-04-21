@@ -3,4 +3,4 @@
 
 
 clean:
-	rm -f *.o *.out *.bc output
+	rm -f *.o *.out *.bc output *.S

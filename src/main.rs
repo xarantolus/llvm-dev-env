@@ -1,12 +1,17 @@
+mod compiler;
+
+use clap::{arg, command, value_parser, Arg, ArgAction, ArgGroup, Command};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
-use inkwell::targets::{InitializationConfig, Target, TargetMachine};
+use inkwell::targets::{FileType, InitializationConfig, Target, TargetMachine};
 use inkwell::types::{BasicType, FunctionType};
 use inkwell::OptimizationLevel;
 use std::error::Error;
 use std::path::Path;
+
+use compiler::compile_info::CompileInfo;
 
 /// Convenience type alias for the `sum` function.
 ///
@@ -40,7 +45,6 @@ fn add_runtime(module: &Module, machine: &TargetMachine) -> Result<(), Box<dyn E
     let tt = target_triple.as_str().to_string_lossy();
 
     if tt.contains("linux") && tt.contains("x86_64") {
-
         module.set_inline_assembly(
             r#"
         .intel_syntax noprefix
@@ -81,6 +85,8 @@ fn native_machine() -> Result<TargetMachine, Box<dyn Error>> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let args = CompileInfo::parse_args()?;
+
     let machine = native_machine()?;
 
     let context = Context::create();
@@ -92,25 +98,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let function = module.add_function("main", fn_type, None);
     let basic_block = context.append_basic_block(function, "entry");
     builder.position_at_end(basic_block);
-    builder.build_return(Some(&context.i32_type().const_int(1, false)));
+    builder.build_return(Some(&context.i32_type().const_int(0, false)));
 
     add_runtime(&module, &machine)?;
 
-    let pass_manager_builder = inkwell::passes::PassManagerBuilder::create();
-    pass_manager_builder.set_optimization_level(OptimizationLevel::Aggressive);
-    let pass_manager = inkwell::passes::PassManager::create(());
+    machine.write_to_file(&module, FileType::Object, Path::new("example.o"))?;
 
-    machine.add_analysis_passes(&pass_manager);
-
-    pass_manager.run_on(&module);
-
-    machine.write_to_file(
-        &module,
-        inkwell::targets::FileType::Object,
-        Path::new("example.o"),
-    )?;
-
-    // ld -nostdlib -nodefaultlibs -e main example.o -o output
     std::process::Command::new("ld")
         .args(&[
             "-nostdlib",
