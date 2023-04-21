@@ -1,30 +1,15 @@
 mod compiler;
 
-use clap::{arg, command, value_parser, Arg, ArgAction, ArgGroup, Command};
-use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::execution_engine::{ExecutionEngine, JitFunction};
+
 use inkwell::module::Module;
 use inkwell::targets::{FileType, InitializationConfig, Target, TargetMachine};
-use inkwell::types::{BasicType, FunctionType};
+use inkwell::types::BasicType;
 use inkwell::OptimizationLevel;
 use std::error::Error;
 use std::path::Path;
 
 use compiler::compile_info::CompileInfo;
-
-/// Convenience type alias for the `sum` function.
-///
-/// Calling this is innately `unsafe` because there's no guarantee it doesn't
-/// do `unsafe` operations internally.
-type SumFunc = unsafe extern "C" fn(u64, u64, u64) -> u64;
-
-struct CodeGen<'ctx> {
-    context: &'ctx Context,
-    module: Module<'ctx>,
-    builder: Builder<'ctx>,
-    execution_engine: ExecutionEngine<'ctx>,
-}
 
 fn add_runtime(module: &Module, machine: &TargetMachine) -> Result<(), Box<dyn Error>> {
     let main_fnt = module
