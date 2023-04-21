@@ -13,14 +13,23 @@
 		"ghcr.io/devcontainers/features/rust": {}
 	},
 	"containerEnv": {
-		"TERM": "xterm-256color"
-	}
+		"TERM": "xterm-256color",
+		"PS1": "\\[\\e[0;32m\\]\\u@\\h \\[\\e[0;36m\\]\\w\\[\\e[0;32m\\]\\[\\e[0m\\]$ "
+	},
+	"postAttachCommand": "cargo build",
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
 	// Uncomment the next line to run commands after the container is created.
 	// "postCreateCommand": "cat /etc/os-release",
 	// Configure tool-specific properties.
-	// "customizations": {},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"colejcummins.llvm-syntax-highlighting",
+				"revng.llvm-ir"
+			]
+		}
+	}
 	// Uncomment to connect as an existing user other than the container default. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "devcontainer"
 }
