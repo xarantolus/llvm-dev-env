@@ -4,7 +4,7 @@ FROM debian:buster-slim AS intermediate
 RUN apt-get -qq update; \
     apt-get install -qqy --no-install-recommends \
     gnupg2 wget ca-certificates apt-transport-https sudo \
-    autoconf automake cmake dpkg-dev file make patch libc6-dev git
+    autoconf automake cmake dpkg-dev file make patch libc6-dev git gdb
 
 # Install LLVM 15
 RUN echo "deb https://apt.llvm.org/buster llvm-toolchain-buster-15 main" \
@@ -18,3 +18,7 @@ RUN echo "deb https://apt.llvm.org/buster llvm-toolchain-buster-15 main" \
 
 # Set env variable for llvm-sys library
 ENV LLVM_SYS_150_PREFIX=/usr/lib/llvm-15
+
+# Install my scripts
+RUN git clone https://github.com/xarantolus/scripts /var/scripts && cd /var/scripts && chmod +x *
+ENV PATH="${PATH}:/var/scripts"
