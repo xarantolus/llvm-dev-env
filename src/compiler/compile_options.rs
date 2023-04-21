@@ -4,18 +4,18 @@ use clap::{arg, command, Arg, ArgAction};
 use inkwell::{targets::FileType, OptimizationLevel};
 
 #[derive(Clone, Debug)]
-pub struct CompileInfo {
-    input_files: Vec<Box<Path>>,
+pub struct CompileOptions {
+    pub input_files: Vec<Box<Path>>,
 
-    target_file: Box<Path>,
+    pub target_file: Box<Path>,
 
-    optimization_level: OptimizationLevel,
+    pub optimization_level: OptimizationLevel,
 
-    output_format: FileType,
+    pub output_format: FileType,
 }
 
-impl CompileInfo {
-    pub fn parse_args() -> Result<CompileInfo, Box<dyn Error>> {
+impl CompileOptions {
+    pub fn parse_args() -> Result<CompileOptions, Box<dyn Error>> {
         let matches = command!()
             .arg(
                 arg!(
@@ -47,12 +47,20 @@ impl CompileInfo {
             return Err("No input files".into());
         }
 
+        let assembly = matches.get_flag("assembly");
+
         let out_file_path = match matches.get_one::<String>("output") {
-            None => "a.out",
+            None => {
+                if assembly {
+                    "a.S"
+                } else {
+                    "a.out"
+                }
+            }
             Some(s) => s.as_str(),
         };
 
-        Ok(CompileInfo {
+        Ok(CompileOptions {
             input_files: remaining_args
                 .iter()
                 .map(|s| Box::from(Path::new(s)))
@@ -71,7 +79,7 @@ impl CompileInfo {
                 },
             },
 
-            output_format: if matches.get_flag("assembly") {
+            output_format: if assembly {
                 FileType::Assembly
             } else {
                 FileType::Object

@@ -10,3 +10,4 @@ clap = { version = "4.2.4", features = ["cargo"]}
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = [
 	"llvm15-0",
 ] }
+tempfile = "3.5.0"
