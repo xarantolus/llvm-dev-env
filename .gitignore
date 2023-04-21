@@ -2,3 +2,6 @@
 test.*
 *.c
 spec.md
+*.o
+*.ll
+*.bc

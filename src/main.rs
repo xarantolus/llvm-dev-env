@@ -2,8 +2,10 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
+use inkwell::targets::{InitializationConfig, Target, TargetMachine};
 use inkwell::OptimizationLevel;
 use std::error::Error;
+use std::path::Path;
 
 /// Convenience type alias for the `sum` function.
 ///
@@ -18,51 +20,53 @@ struct CodeGen<'ctx> {
     execution_engine: ExecutionEngine<'ctx>,
 }
 
-impl<'ctx> CodeGen<'ctx> {
-    fn jit_compile_sum(&self) -> Option<JitFunction<SumFunc>> {
-        let i64_type = self.context.i64_type();
-        let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into(), i64_type.into()], false);
-        let function = self.module.add_function("sum", fn_type, None);
-        let basic_block = self.context.append_basic_block(function, "entry");
-
-        self.builder.position_at_end(basic_block);
-
-        let x = function.get_nth_param(0)?.into_int_value();
-        let y = function.get_nth_param(1)?.into_int_value();
-        let z = function.get_nth_param(2)?.into_int_value();
-
-        let sum = self.builder.build_int_add(x, y, "sum");
-        let sum = self.builder.build_int_add(sum, z, "sum");
-
-        self.builder.build_return(Some(&sum));
-
-        unsafe { self.execution_engine.get_function("sum").ok() }
-    }
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
     let context = Context::create();
-    let module = context.create_module("sum");
-    let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
-    let codegen = CodeGen {
-        context: &context,
-        module,
-        builder: context.create_builder(),
-        execution_engine,
-    };
+    let module = context.create_module("example");
+    let builder = context.create_builder();
 
-    let sum = codegen
-        .jit_compile_sum()
-        .ok_or("Unable to JIT compile `sum`")?;
+    let i32_type = context.i32_type();
+    let fn_type = i32_type.fn_type(&[], false);
 
-    let x = 1u64;
-    let y = 2u64;
-    let z = 3u64;
+    let function = module.add_function("main", fn_type, None);
+    let basic_block = context.append_basic_block(function, "entry");
 
-    unsafe {
-        println!("{} + {} + {} = {}", x, y, z, sum.call(x, y, z));
-        assert_eq!(sum.call(x, y, z), x + y + z);
-    }
+    builder.position_at_end(basic_block);
+    builder.build_return(Some(&context.i32_type().const_int(0, false)));
+
+    Target::initialize_native(&InitializationConfig::default())?;
+    let target_triple = TargetMachine::get_default_triple();
+
+    let target = Target::from_triple(&target_triple).unwrap();
+
+    let machine = target
+        .create_target_machine(
+            &target_triple,
+            "",
+            "",
+            OptimizationLevel::Aggressive,
+            inkwell::targets::RelocMode::Static,
+            inkwell::targets::CodeModel::Small,
+        )
+        .ok_or("Error creating target machine")?;
+
+    println!("Target triple: {}", target_triple);
+
+    machine.write_to_file(
+        &module,
+        inkwell::targets::FileType::Object,
+        Path::new("example.o"),
+    )?;
+
+    let pass_manager_builder = inkwell::passes::PassManagerBuilder::create();
+    pass_manager_builder.set_optimization_level(OptimizationLevel::Aggressive);
+    let pass_manager = inkwell::passes::PassManager::create(());
+
+    machine.add_analysis_passes(&pass_manager);
+
+    pass_manager.run_on(&module);
+
+    module.write_bitcode_to_path(Path::new("example.bc"));
 
     Ok(())
 }
