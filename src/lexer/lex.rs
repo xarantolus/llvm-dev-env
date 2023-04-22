@@ -226,7 +226,7 @@ impl Token {
         })
     }
 
-    fn lex(input: &str, start: usize) -> Result<(Token, usize), LexError> {
+    pub fn lex(input: &str, start: usize) -> Result<(Token, usize), LexError> {
         let input = &input[start..];
         if input.len() == 0 {
             return Ok((Token::EOF, start));
@@ -346,7 +346,7 @@ impl Token {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{error::Error, vec};
+    use std::vec;
 
     fn assert_token_stream(s: &str, tokens: Vec<Token>) {
         let mut str_pos = 0;
