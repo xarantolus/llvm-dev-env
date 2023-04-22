@@ -2,7 +2,7 @@ use core::fmt;
 use std::{error::Error, fmt::Display, num::ParseIntError};
 
 #[derive(Debug, PartialEq, Clone)]
-enum Token {
+pub enum Token {
     // Imports
     Need,
     Include,
@@ -15,8 +15,8 @@ enum Token {
     LBrace,
     RBrace,
 
-	LBracket,
-	RBracket,
+    LBracket,
+    RBracket,
 
     LParen,
     RParen,
@@ -71,8 +71,8 @@ impl Display for Token {
             Token::Identifier(s) => write!(f, "{}", s),
             Token::LBrace => write!(f, "{{"),
             Token::RBrace => write!(f, "}}"),
-			Token::LBracket => write!(f, "["),
-			Token::RBracket => write!(f, "]"),
+            Token::LBracket => write!(f, "["),
+            Token::RBracket => write!(f, "]"),
             Token::LParen => write!(f, "("),
             Token::RParen => write!(f, ")"),
             Token::Minus => write!(f, "-"),
@@ -104,7 +104,7 @@ impl Display for Token {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-enum LexErrorType {
+pub enum LexErrorType {
     InvalidToken(String),
     InvalidNumber(ParseIntError),
     InvalidStringEscape(char),
@@ -112,11 +112,38 @@ enum LexErrorType {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-struct LexError {
-    error_type: LexErrorType,
-    line: usize,
-    column: usize,
+pub struct LexError {
+    pub error_type: LexErrorType,
+    pub line: usize,
+    pub column: usize,
 }
+
+impl LexError {
+    fn new(error_type: LexErrorType, input: &str, pos: usize) -> Self {
+        let mut line = 1;
+        let mut column = 0;
+
+        for (i, c) in input.chars().enumerate() {
+            if i == pos {
+                break;
+            }
+
+            if c == '\n' {
+                line += 1;
+                column = 0;
+            } else {
+                column += 1;
+            }
+        }
+
+        Self {
+            error_type,
+            line,
+            column,
+        }
+    }
+}
+
 impl Error for LexError {}
 
 impl fmt::Display for LexError {
@@ -139,8 +166,8 @@ impl Token {
         Some(match c {
             '(' => (Token::LParen, 1),
             ')' => (Token::RParen, 1),
-			'[' => (Token::LBracket, 1),
-			']' => (Token::RBracket, 1),
+            '[' => (Token::LBracket, 1),
+            ']' => (Token::RBracket, 1),
             '{' => (Token::LBrace, 1),
             '}' => (Token::RBrace, 1),
             '-' => {
@@ -234,11 +261,11 @@ impl Token {
             let mut escape = false;
             loop {
                 if offset >= input.len() {
-                    return Err(LexError {
-                        error_type: LexErrorType::UnexpectedEOF(Token::String(string)),
-                        line: 0,
-                        column: 0,
-                    });
+                    return Err(LexError::new(
+                        LexErrorType::UnexpectedEOF(Token::String(string)),
+                        input,
+                        start + offset,
+                    ));
                 }
                 let c = input.chars().nth(offset).unwrap();
                 if escape {
@@ -248,11 +275,11 @@ impl Token {
                         '\\' => string.push('\\'),
                         '"' => string.push('"'),
                         _ => {
-                            return Err(LexError {
-                                error_type: LexErrorType::InvalidStringEscape(c),
-                                line: 0,
-                                column: 0,
-                            })
+                            return Err(LexError::new(
+                                LexErrorType::InvalidStringEscape(c),
+                                input,
+                                start,
+                            ));
                         }
                     }
                     escape = false;
@@ -287,20 +314,12 @@ impl Token {
             if number.starts_with("0x") {
                 return match i64::from_str_radix(&number[2..], 16) {
                     Ok(number) => Ok((Token::Number(number), start + offset)),
-                    Err(e) => Err(LexError {
-                        error_type: LexErrorType::InvalidNumber(e),
-                        line: 0,
-                        column: 0,
-                    }),
+                    Err(e) => Err(LexError::new(LexErrorType::InvalidNumber(e), input, start)),
                 };
             }
             return match i64::from_str_radix(&number, 10) {
                 Ok(number) => Ok((Token::Number(number), start + offset)),
-                Err(e) => Err(LexError {
-                    error_type: LexErrorType::InvalidNumber(e),
-                    line: 0,
-                    column: 0,
-                }),
+                Err(e) => Err(LexError::new(LexErrorType::InvalidNumber(e), input, start)),
             };
         }
 
@@ -497,23 +516,23 @@ mod tests {
         );
     }
 
-	#[test]
-	fn arrays() {
-		assert_token_stream(
-			"int.. a = [1, 2, 3]",
-			vec![
-				Token::Identifier("int".to_string()),
-				Token::DotDot,
-				Token::Identifier("a".to_string()),
-				Token::Assign,
-				Token::LBracket,
-				Token::Number(1),
-				Token::Comma,
-				Token::Number(2),
-				Token::Comma,
-				Token::Number(3),
-				Token::RBracket,
-			],
-		);
-	}
+    #[test]
+    fn arrays() {
+        assert_token_stream(
+            "int.. a = [1, 2, 3]",
+            vec![
+                Token::Identifier("int".to_string()),
+                Token::DotDot,
+                Token::Identifier("a".to_string()),
+                Token::Assign,
+                Token::LBracket,
+                Token::Number(1),
+                Token::Comma,
+                Token::Number(2),
+                Token::Comma,
+                Token::Number(3),
+                Token::RBracket,
+            ],
+        );
+    }
 }
