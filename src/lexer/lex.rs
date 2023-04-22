@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{error::Error, fmt::Display, num::ParseIntError};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
     // Imports
     Need,
@@ -42,6 +42,12 @@ pub enum Token {
     LessEqual,
     // >=
     GreaterEqual,
+    // and
+    And,
+    // or
+    Or,
+    // not
+    Not,
 
     Semicolon,
     Dot,
@@ -56,8 +62,9 @@ pub enum Token {
 
     At,
 
-    String(String),
-    Number(i64),
+    StringLiteral(String),
+    IntLiteral(i64),
+    BoolLiteral(bool),
 
     EOF,
 }
@@ -87,6 +94,9 @@ impl Display for Token {
             Token::Greater => write!(f, ">"),
             Token::LessEqual => write!(f, "<="),
             Token::GreaterEqual => write!(f, ">="),
+            Token::And => write!(f, "and"),
+            Token::Or => write!(f, "or"),
+            Token::Not => write!(f, "not"),
             Token::Semicolon => write!(f, ";"),
             Token::Dot => write!(f, "."),
             Token::DotDot => write!(f, ".."),
@@ -96,8 +106,9 @@ impl Display for Token {
             Token::DoubleColon => write!(f, "::"),
             Token::Comma => write!(f, ","),
             Token::At => write!(f, "@"),
-            Token::String(s) => write!(f, "{:#?}", s),
-            Token::Number(n) => write!(f, "{}", n),
+            Token::StringLiteral(s) => write!(f, "{:#?}", s),
+            Token::IntLiteral(n) => write!(f, "{}", n),
+            Token::BoolLiteral(b) => write!(f, "{}", b),
             Token::EOF => write!(f, ""),
         }
     }
@@ -262,7 +273,7 @@ impl Token {
             loop {
                 if offset >= input.len() {
                     return Err(LexError::new(
-                        LexErrorType::UnexpectedEOF(Token::String(string)),
+                        LexErrorType::UnexpectedEOF(Token::StringLiteral(string)),
                         input,
                         start + offset,
                     ));
@@ -293,7 +304,7 @@ impl Token {
                 offset += 1;
             }
 
-            return Ok((Token::String(string), start + offset + 1));
+            return Ok((Token::StringLiteral(string), start + offset + 1));
         }
 
         // Check if token is a number
@@ -313,12 +324,12 @@ impl Token {
             // Now parse it. We allow numbers with 0x prefix to be hex
             if number.starts_with("0x") {
                 return match i64::from_str_radix(&number[2..], 16) {
-                    Ok(number) => Ok((Token::Number(number), start + offset)),
+                    Ok(number) => Ok((Token::IntLiteral(number), start + offset)),
                     Err(e) => Err(LexError::new(LexErrorType::InvalidNumber(e), input, start)),
                 };
             }
             return match i64::from_str_radix(&number, 10) {
-                Ok(number) => Ok((Token::Number(number), start + offset)),
+                Ok(number) => Ok((Token::IntLiteral(number), start + offset)),
                 Err(e) => Err(LexError::new(LexErrorType::InvalidNumber(e), input, start)),
             };
         }
@@ -338,6 +349,11 @@ impl Token {
             "proc" => Ok((Token::Proc, start + offset)),
             "need" => Ok((Token::Need, start + offset)),
             "include" => Ok((Token::Include, start + offset)),
+            "and" => Ok((Token::And, start + offset)),
+            "or" => Ok((Token::Or, start + offset)),
+            "not" => Ok((Token::Not, start + offset)),
+            "true" => Ok((Token::BoolLiteral(true), start + offset)),
+            "false" => Ok((Token::BoolLiteral(false), start + offset)),
             _ => Ok((Token::Identifier(iden), start + offset)),
         }
     }
@@ -372,19 +388,22 @@ mod tests {
 
     #[test]
     fn simple_math() {
-        assert_token_stream("1+5", vec![Token::Number(1), Token::Plus, Token::Number(5)]);
+        assert_token_stream(
+            "1+5",
+            vec![Token::IntLiteral(1), Token::Plus, Token::IntLiteral(5)],
+        );
         assert_token_stream(
             "1 + 5",
-            vec![Token::Number(1), Token::Plus, Token::Number(5)],
+            vec![Token::IntLiteral(1), Token::Plus, Token::IntLiteral(5)],
         );
         assert_token_stream(
             "1 + 5 - 10",
             vec![
-                Token::Number(1),
+                Token::IntLiteral(1),
                 Token::Plus,
-                Token::Number(5),
+                Token::IntLiteral(5),
                 Token::Minus,
-                Token::Number(10),
+                Token::IntLiteral(10),
             ],
         );
 
@@ -392,12 +411,12 @@ mod tests {
             "(1+5) * 3",
             vec![
                 Token::LParen,
-                Token::Number(1),
+                Token::IntLiteral(1),
                 Token::Plus,
-                Token::Number(5),
+                Token::IntLiteral(5),
                 Token::RParen,
                 Token::Star,
-                Token::Number(3),
+                Token::IntLiteral(3),
             ],
         );
     }
@@ -419,21 +438,21 @@ mod tests {
 
     #[test]
     fn strings() {
-        assert_token_stream("\"test\"", vec![Token::String("test".to_string())]);
+        assert_token_stream("\"test\"", vec![Token::StringLiteral("test".to_string())]);
 
         assert_token_stream(
             "\"test\" + \"test\"",
             vec![
-                Token::String("test".to_string()),
+                Token::StringLiteral("test".to_string()),
                 Token::Plus,
-                Token::String("test".to_string()),
+                Token::StringLiteral("test".to_string()),
             ],
         );
 
         // Escape sequences: \n, \t, \", \\
         assert_token_stream(
             "\"\\n\\\"\\t\\\\\"",
-            vec![Token::String("\n\"\t\\".to_string())],
+            vec![Token::StringLiteral("\n\"\t\\".to_string())],
         );
     }
 
@@ -449,9 +468,9 @@ mod tests {
                 Token::Question,
                 Token::Identifier("n".to_string()),
                 Token::Equality,
-                Token::Number(0),
+                Token::IntLiteral(0),
                 Token::LBrace,
-                Token::Number(1),
+                Token::IntLiteral(1),
                 Token::RBrace,
                 Token::Colon,
                 Token::LBrace,
@@ -461,7 +480,7 @@ mod tests {
                 Token::LParen,
                 Token::Identifier("n".to_string()),
                 Token::Minus,
-                Token::Number(1),
+                Token::IntLiteral(1),
                 Token::RParen,
                 Token::RBrace,
             ],
@@ -526,12 +545,57 @@ mod tests {
                 Token::Identifier("a".to_string()),
                 Token::Assign,
                 Token::LBracket,
-                Token::Number(1),
+                Token::IntLiteral(1),
                 Token::Comma,
-                Token::Number(2),
+                Token::IntLiteral(2),
                 Token::Comma,
-                Token::Number(3),
+                Token::IntLiteral(3),
                 Token::RBracket,
+            ],
+        );
+    }
+
+    #[test]
+    fn multi_conditions() {
+        assert_token_stream(
+            r#"? n == 0 or n == 1"#,
+            vec![
+                Token::Question,
+                Token::Identifier("n".to_string()),
+                Token::Equality,
+                Token::IntLiteral(0),
+                Token::Or,
+                Token::Identifier("n".to_string()),
+                Token::Equality,
+                Token::IntLiteral(1),
+            ],
+        );
+
+        assert_token_stream(
+            r#"? n >= 0 and m <> 1 {"#,
+            vec![
+                Token::Question,
+                Token::Identifier("n".to_string()),
+                Token::GreaterEqual,
+                Token::IntLiteral(0),
+                Token::And,
+                Token::Identifier("m".to_string()),
+                Token::NotEqual,
+                Token::IntLiteral(1),
+                Token::LBrace,
+            ],
+        );
+    }
+
+    #[test]
+    fn bools() {
+        assert_token_stream(
+            r#"? true and false"#,
+            vec![
+                Token::Question,
+                Token::BoolLiteral(true),
+                Token::And,
+                Token::BoolLiteral(false),
             ],
         );
     }

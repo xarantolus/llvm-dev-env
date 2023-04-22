@@ -35,4 +35,6 @@ proc main(str.. args) -> int {
 
 	let msg = "Maximum element in array " + str::from_arr(arr) + " " + max(arr);
 	print(msg);
+
+	0
 }

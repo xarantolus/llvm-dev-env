@@ -1,7 +1,9 @@
 use core::fmt;
-use std::error::Error;
+use std::{error::Error, fmt::Debug};
 
 use crate::lexer::lex::{LexError, Token};
+
+use super::util;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ParseErrorType {
@@ -21,7 +23,7 @@ impl From<LexError> for ParseError {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct ParseError {
     pub error_type: ParseErrorType,
     pub line: usize,
@@ -29,23 +31,8 @@ pub struct ParseError {
 }
 
 impl ParseError {
-    fn new(error_type: ParseErrorType, input: &str, pos: usize) -> Self {
-        let mut line = 1;
-        let mut column = 0;
-
-        for (i, c) in input.chars().enumerate() {
-            if i == pos {
-                break;
-            }
-
-            if c == '\n' {
-                line += 1;
-                column = 0;
-            } else {
-                column += 1;
-            }
-        }
-
+    pub(crate) fn new(error_type: ParseErrorType, input: &str, pos: usize) -> Self {
+        let (line, column) = util::get_line_and_column(input, pos);
         Self {
             error_type,
             line,
@@ -73,9 +60,15 @@ impl fmt::Display for ParseError {
     }
 }
 
+impl Debug for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 pub struct Parser {
     input_file: String,
-    current_position: usize,
+    pub(crate) current_position: usize,
 }
 
 impl Parser {
@@ -90,28 +83,43 @@ impl Parser {
         let (token, pos) = Token::lex(&self.input_file, self.current_position)?;
 
         // Make sure the Token is one of the expected ones. If expected_tokens includes something like a number, we ignore the numerical value
-        let valid_token = expected_tokens.iter().any(|t| {
-            *t == token
-                || match t.clone() {
-                    Token::Number(_) => matches!(token, Token::Number(_)),
-                    Token::String(_) => matches!(token, Token::String(_)),
-                    Token::Identifier(_) => matches!(token, Token::Identifier(_)),
-                    _ => false,
+        let mut valid_token = expected_tokens.is_empty();
+        if !valid_token {
+            for t in expected_tokens.iter() {
+                if *t == token
+                    || match t.clone() {
+                        Token::IntLiteral(_) => matches!(token, Token::IntLiteral(_)),
+                        Token::StringLiteral(_) => matches!(token, Token::StringLiteral(_)),
+                        Token::BoolLiteral(_) => matches!(token, Token::BoolLiteral(_)),
+                        Token::Identifier(_) => matches!(token, Token::Identifier(_)),
+                        _ => false,
+                    }
+                {
+                    valid_token = true;
+                    break;
                 }
-        });
+            }
+        }
 
         if !valid_token {
             // Skip whitespace the same way the lexer does -- otherwise we would get weird positions in the error message
-            let mut column = self.current_position;
-			// FIXME: this is super inefficient, especially for larger files (as we re-parse the unicode chars every iteration)
-            while column < self.input_file.len() && self.input_file.chars().nth(column).unwrap().is_whitespace() {
-                column += 1;
+            let mut pos_in_file = self.current_position;
+            // FIXME: this is super inefficient, especially for larger files (as we re-parse the unicode chars every iteration)
+            while pos_in_file < self.input_file.len()
+                && self
+                    .input_file
+                    .chars()
+                    .nth(pos_in_file)
+                    .unwrap()
+                    .is_whitespace()
+            {
+                pos_in_file += 1;
             }
 
             return Err(ParseError::new(
                 ParseErrorType::InvalidToken(token.clone(), expected_tokens),
                 &self.input_file,
-                column,
+                pos_in_file,
             ));
         }
 
@@ -130,16 +138,16 @@ mod tests {
         let mut parser = Parser::new("1 + 2".to_string());
 
         assert_eq!(
-            parser.next_token(vec![Token::Number(0)]),
-            Ok(Token::Number(1))
+            parser.next_token(vec![Token::IntLiteral(0)]),
+            Ok(Token::IntLiteral(1))
         );
         assert_eq!(
             parser.next_token(vec![Token::Minus, Token::Plus]),
             Ok(Token::Plus)
         );
         assert_eq!(
-            parser.next_token(vec![Token::Number(0)]),
-            Ok(Token::Number(2))
+            parser.next_token(vec![Token::IntLiteral(0)]),
+            Ok(Token::IntLiteral(2))
         );
     }
 
@@ -150,7 +158,7 @@ mod tests {
         assert_eq!(
             parser.next_token(vec![Token::Plus]),
             Err(ParseError::new(
-                ParseErrorType::InvalidToken(Token::Number(1), vec![Token::Plus]),
+                ParseErrorType::InvalidToken(Token::IntLiteral(1), vec![Token::Plus]),
                 "1 + 2",
                 0
             ))
@@ -159,8 +167,8 @@ mod tests {
         parser = Parser::new("1 + 2".to_string());
 
         assert_eq!(
-            parser.next_token(vec![Token::Number(0)]),
-            Ok(Token::Number(1))
+            parser.next_token(vec![Token::IntLiteral(0)]),
+            Ok(Token::IntLiteral(1))
         );
         assert_eq!(
             parser.next_token(vec![Token::Minus]),
