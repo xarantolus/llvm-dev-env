@@ -338,10 +338,6 @@ impl Program {
                     Box::new(second_expr),
                 ))
             }
-            _ => {
-                // next_token wrong implementation
-                panic!("Unexpected token");
-            }
         }
     }
 
