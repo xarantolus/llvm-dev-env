@@ -160,6 +160,7 @@ impl Token {
 #[cfg(test)]
 mod tests {
     use crate::lexer::lexer::Lexer;
+    use pretty_assertions::assert_eq;
 
     use super::*;
     use std::vec;

@@ -101,9 +101,13 @@ pub enum Expr {
     VariableAccess(String),
     FunctionCall(String, Vec<Expr>),
 
-    BinOp(Box<Expr>, BinOp, Box<Expr>),
+    BinOp(Box<Expr>, BinOp, Box<Expr>, bool),
 
-    If(Box<Expr>, Stmt, Stmt),
+    If {
+        condition: Box<Expr>,
+        true_block: Stmt,
+        false_block: Stmt,
+    },
 }
 
 impl Expr {
@@ -129,7 +133,7 @@ pub enum Stmt {
     },
     Block(Vec<Stmt>),
     // ExprStmt are only allowed as the last statement in a block
-    ExprStmt(Box<Expr>),
+    Expr(Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

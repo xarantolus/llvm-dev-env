@@ -122,7 +122,7 @@ impl Program {
             let previous_pos = parser.current_position;
             let mut had_expr = false;
             if let Ok(expr) = Program::parse_expression(parser) {
-                statements.push(Stmt::ExprStmt(Box::new(expr)));
+                statements.push(Stmt::Expr(Box::new(expr)));
 
                 // Skip a semicolon if it's there.
                 // If there's no semicolon, we might reuse the expression or leave it as the last thing in the block
@@ -158,7 +158,7 @@ impl Program {
                     }
 
                     // Make sure the last expression is assignable
-                    let Some(Stmt::ExprStmt(left_expr)) = statements.pop() else {
+                    let Some(Stmt::Expr(left_expr)) = statements.pop() else {
                         panic!("Expected last statement to be an expression statement");
                     };
                     if !left_expr.is_assignable() {
@@ -184,7 +184,7 @@ impl Program {
                 }
                 // Variable declaration -- previous expr is the type, then name, assignment etc.
                 Token::Identifier(var_name) => {
-                    let Some(Stmt::ExprStmt(type_expr)) = statements.pop() else {
+                    let Some(Stmt::Expr(type_expr)) = statements.pop() else {
                             panic!("Expected last statement to be an expression statement");
                     };
                     if !had_expr {
@@ -314,22 +314,24 @@ impl Program {
                 // but have different precedence. So we need to reorganize the tree
                 // This e.g. happens for 1 * 2 + 3
 
-                if let Expr::BinOp(second_left, second_binop_type, second_right) =
+                if let Expr::BinOp(second_left, second_binop_type, second_right, parens) =
                     second_expr.clone()
                 {
                     // It's actually a correct binop type
                     if let Ok(second_binop) = BinOp::try_from(second_binop_type.clone()) {
                         // And the first binop has higher precedence than the second one
-                        if first_binop_type.precedence() > second_binop.precedence() {
+                        if !parens && first_binop_type.precedence() > second_binop.precedence() {
                             // So we need to reorganize the tree
                             return Ok(Expr::BinOp(
                                 Box::new(Expr::BinOp(
                                     Box::new(first_expr),
                                     first_binop_type,
                                     second_left,
+                                    false,
                                 )),
                                 second_binop_type,
                                 second_right,
+                                false,
                             ));
                         }
                     }
@@ -339,6 +341,7 @@ impl Program {
                     Box::new(first_expr),
                     first_binop_type,
                     Box::new(second_expr),
+                    false,
                 ))
             }
         }
@@ -371,9 +374,18 @@ impl Program {
                         expr
                     }
                 }
-                Token::LParen => {
-                    let expr = Self::parse_expression(parser)?;
-                    parser.skip_token(Token::RParen)?;
+                // () and {} are pretty similar for expressions, so we can handle them the same way
+                tok @ (Token::LParen | Token::LBrace) => {
+                    let mut expr = Self::parse_expression(parser)?;
+                    if let Expr::BinOp(left, op, right, _) = expr {
+                        // We have a parenthesized expression
+                        expr = Expr::BinOp(left, op, right, true)
+                    }
+                    parser.skip_token(if tok == Token::LParen {
+                        Token::RParen
+                    } else {
+                        Token::RBrace
+                    })?;
                     expr
                 }
                 Token::Question => {
@@ -381,12 +393,11 @@ impl Program {
                     let true_branch = Self::parse_block(parser, false)?;
                     parser.skip_token(Token::Colon)?;
                     let false_branch = Self::parse_block(parser, false)?;
-                    Expr::If(Box::new(condition), true_branch, false_branch)
-                }
-                Token::LBrace => {
-                    let expr = Self::parse_expression(parser)?;
-                    parser.skip_token(Token::RBrace)?;
-                    expr
+                    Expr::If {
+                        condition: Box::new(condition),
+                        true_block: true_branch,
+                        false_block: false_branch,
+                    }
                 }
                 Token::LBracket => {
                     // Array literal
@@ -420,6 +431,7 @@ impl Program {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn hello_world() {
@@ -448,7 +460,7 @@ mod tests {
                     name: "main".to_string(),
                     return_type: "int".to_string(),
                     parameters: vec![],
-                    body: Stmt::Block(vec![Stmt::ExprStmt(Box::new(Expr::IntLiteral(0)))]),
+                    body: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::IntLiteral(0)))]),
                 }],
             },
         )
@@ -471,7 +483,7 @@ mod tests {
                     name: "main".to_string(),
                     return_type: "int".to_string(),
                     parameters: vec![],
-                    body: Stmt::Block(vec![Stmt::ExprStmt(Box::new(Expr::FunctionCall(
+                    body: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::FunctionCall(
                         "print".to_string(),
                         vec![Expr::StringLiteral("Hello World".to_string())]
                     )))]),
@@ -499,7 +511,8 @@ mod tests {
             Expr::BinOp(
                 Box::new(Expr::IntLiteral(1)),
                 BinOp::Plus,
-                Box::new(Expr::IntLiteral(2))
+                Box::new(Expr::IntLiteral(2)),
+                false
             )
         );
 
@@ -514,8 +527,10 @@ mod tests {
                 Box::new(Expr::BinOp(
                     Box::new(Expr::IntLiteral(2)),
                     BinOp::Multiply,
-                    Box::new(Expr::IntLiteral(3))
-                ))
+                    Box::new(Expr::IntLiteral(3)),
+                    false
+                )),
+                false
             )
         );
 
@@ -528,10 +543,12 @@ mod tests {
                 Box::new(Expr::BinOp(
                     Box::new(Expr::IntLiteral(1)),
                     BinOp::Multiply,
-                    Box::new(Expr::IntLiteral(2))
+                    Box::new(Expr::IntLiteral(2)),
+                    false
                 )),
                 BinOp::Plus,
-                Box::new(Expr::IntLiteral(3))
+                Box::new(Expr::IntLiteral(3)),
+                false
             )
         );
 
@@ -556,7 +573,8 @@ mod tests {
                 Box::new(Expr::BinOp(
                     Box::new(Expr::IntLiteral(0)),
                     BinOp::Plus,
-                    Box::new(Expr::IntLiteral(1))
+                    Box::new(Expr::IntLiteral(1)),
+                    false
                 ))
             )
         );
@@ -581,7 +599,8 @@ mod tests {
             Expr::BinOp(
                 Box::new(Expr::IntLiteral(1)),
                 BinOp::LessThanOrEqual,
-                Box::new(Expr::IntLiteral(2))
+                Box::new(Expr::IntLiteral(2)),
+                false
             )
         );
 
@@ -595,15 +614,16 @@ mod tests {
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
-            Expr::If(
-                Box::new(Expr::BinOp(
+            Expr::If {
+                condition: Box::new(Expr::BinOp(
                     Box::new(Expr::VariableAccess("a".to_string())),
                     BinOp::Equal,
-                    Box::new(Expr::VariableAccess("b".to_string()))
+                    Box::new(Expr::VariableAccess("b".to_string())),
+                    false
                 )),
-                Stmt::Block(vec![Stmt::ExprStmt(Box::new(Expr::IntLiteral(1)))]),
-                Stmt::Block(vec![Stmt::ExprStmt(Box::new(Expr::IntLiteral(2)))])
-            )
+                true_block: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::IntLiteral(1)))]),
+                false_block: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::IntLiteral(2)))])
+            }
         );
     }
 
@@ -619,7 +639,7 @@ mod tests {
                     type_name: "int".to_string(),
                     expr: Box::new(Expr::IntLiteral(5)),
                 },
-                Stmt::ExprStmt(Box::new(Expr::VariableAccess("a".to_string())))
+                Stmt::Expr(Box::new(Expr::VariableAccess("a".to_string())))
             ])
         );
 
@@ -633,7 +653,7 @@ mod tests {
                     type_name: "int..".to_string(),
                     expr: Box::new(Expr::ArrayLiteral(vec![Expr::IntLiteral(5)])),
                 },
-                Stmt::ExprStmt(Box::new(Expr::VariableAccess("a".to_string())))
+                Stmt::Expr(Box::new(Expr::VariableAccess("a".to_string())))
             ])
         );
 
@@ -652,13 +672,14 @@ mod tests {
                     type_name: "int..".to_string(),
                     expr: Box::new(Expr::ArrayLiteral(vec![Expr::IntLiteral(7)])),
                 },
-                Stmt::ExprStmt(Box::new(Expr::BinOp(
+                Stmt::Expr(Box::new(Expr::BinOp(
                     Box::new(Expr::ArrayAccess(
                         Box::new(Expr::VariableAccess("b".to_string())),
                         Box::new(Expr::IntLiteral(0))
                     )),
                     BinOp::Plus,
-                    Box::new(Expr::VariableAccess("a".to_string()))
+                    Box::new(Expr::VariableAccess("a".to_string())),
+                    false
                 )))
             ])
         );
