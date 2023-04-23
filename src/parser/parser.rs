@@ -89,7 +89,8 @@ impl Program {
 
         // Now maybe an arrow + return type OR an opening brace that starts the body
         let return_type = {
-            if let Token::Arrow = parser.next_token(vec![Token::Arrow, Token::LBrace])? {
+            if let Token::Arrow = parser.peek_token(vec![Token::Arrow, Token::LBrace])? {
+                parser.skip_token(Token::Arrow)?;
                 let Token::Identifier(return_type) = parser.next_token(vec![TOK_IDENTIFIER])? else {
                     panic!("next_token returned something other than an identifier");
                 };
