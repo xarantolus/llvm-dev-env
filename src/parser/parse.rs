@@ -3,10 +3,15 @@ use std::{error::Error, fmt::Debug};
 
 use crate::lexer::lex::{LexError, Token};
 
-use super::util;
+use super::{util, ast::Expr};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ParseErrorType {
+    UnknownPrefix {
+        prefix: Expr,
+        current: Token,
+        expected: Vec<Expr>,
+    },
     InvalidToken(Token, Vec<Token>),
     LexError(LexError),
 }
@@ -56,6 +61,15 @@ impl fmt::Display for ParseError {
                 "Lex error {:?} at line {} column {}",
                 error, self.line, self.column
             ),
+            ParseErrorType::UnknownPrefix {
+                ref prefix,
+                ref current,
+                ref expected,
+            } => write!(
+                f,
+                "Unknown prefix {:?} at line {} column {} for current token {:?}. Expected one of {:?}",
+                prefix, self.line, self.column, current, expected
+            ),
         }
     }
 }
@@ -67,7 +81,7 @@ impl Debug for ParseError {
 }
 
 pub struct Parser {
-    input_file: String,
+    pub(crate) input_file: String,
     pub(crate) current_position: usize,
 }
 
@@ -79,7 +93,10 @@ impl Parser {
         }
     }
 
-    pub fn next_token(&mut self, expected_tokens: Vec<Token>) -> Result<Token, ParseError> {
+    fn peek_next_impl(
+        &mut self,
+        expected_tokens: Vec<Token>,
+    ) -> Result<(Token, usize), ParseError> {
         let (token, pos) = Token::lex(&self.input_file, self.current_position)?;
 
         // Make sure the Token is one of the expected ones. If expected_tokens includes something like a number, we ignore the numerical value
@@ -123,9 +140,27 @@ impl Parser {
             ));
         }
 
-        self.current_position = pos;
+        Ok((token, pos))
+    }
 
+    /// Peeks at the next token without advancing the parser
+    pub fn peek_token(&mut self, expected_tokens: Vec<Token>) -> Result<Token, ParseError> {
+        let (token, _) = self.peek_next_impl(expected_tokens)?;
         Ok(token)
+    }
+
+    /// Advances to the next token and checks that they are of the specified type
+    pub fn next_token(&mut self, expected_tokens: Vec<Token>) -> Result<Token, ParseError> {
+        let (token, pos) = self.peek_next_impl(expected_tokens)?;
+        self.current_position = pos;
+        Ok(token)
+    }
+
+    /// Skip a token of the specified type, returning an error if the next token is not of the specified type
+    pub fn skip_token(&mut self, token: Token) -> Result<(), ParseError> {
+        let (token, pos) = self.peek_next_impl(vec![token])?;
+        self.current_position = pos;
+        Ok(())
     }
 }
 

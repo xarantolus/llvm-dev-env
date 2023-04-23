@@ -3,67 +3,89 @@ use std::{error::Error, fmt::Display, num::ParseIntError};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
-    // Imports
+    /// Imports
     Need,
+    /// Includes
     Include,
 
-    // Procedures
+    /// Procedures
     Proc,
 
+    /// Identifiers
     Identifier(String),
 
+    /// {
     LBrace,
+    /// }
     RBrace,
 
+    /// [
     LBracket,
+    /// ]
     RBracket,
 
+    /// (
     LParen,
+    /// )
     RParen,
 
+    /// -
     Minus,
+    /// +
     Plus,
+    /// *
     Star,
+    /// /
     Slash,
+    /// %
     Percent,
 
-    // =
+    /// =
     Assign,
 
-    // ==
+    /// ==
     Equality,
-    // <>
+    /// <>
     NotEqual,
-    // <
+    /// <
     Less,
-    // >
+    /// >
     Greater,
-    // <=
+    /// <=
     LessEqual,
-    // >=
+    /// >=
     GreaterEqual,
-    // and
+    /// and
     And,
-    // or
+    /// or
     Or,
-    // not
+    /// not
     Not,
 
+    /// ;
     Semicolon,
-    Dot,
+    /// ..
     DotDot,
-    // ->
+    /// ->
     Arrow,
 
+    /// ?
     Question,
+    /// :
     Colon,
+    /// ::
     DoubleColon,
+    /// ,
     Comma,
 
+    /// @
     At,
 
+    /// "string"
     StringLiteral(String),
+    /// 123
     IntLiteral(i64),
+    /// true
     BoolLiteral(bool),
 
     EOF,
@@ -98,7 +120,7 @@ impl Display for Token {
             Token::Or => write!(f, "or"),
             Token::Not => write!(f, "not"),
             Token::Semicolon => write!(f, ";"),
-            Token::Dot => write!(f, "."),
+            // Token::Dot => write!(f, "."),
             Token::DotDot => write!(f, ".."),
             Token::Arrow => write!(f, "->"),
             Token::Question => write!(f, "?"),
@@ -220,7 +242,8 @@ impl Token {
                 if next_c == '.' {
                     (Token::DotDot, 2)
                 } else {
-                    (Token::Dot, 1)
+                    return None;
+                    // (Token::Dot, 1)
                 }
             }
             '?' => (Token::Question, 1),
@@ -356,6 +379,27 @@ impl Token {
             "false" => Ok((Token::BoolLiteral(false), start + offset)),
             _ => Ok((Token::Identifier(iden), start + offset)),
         }
+    }
+}
+
+impl Token {
+    pub const IDEN: Token = Token::Identifier(String::new());
+
+    // Some convenience functions for creating empty tokens
+    pub const fn iden() -> Token {
+        Token::Identifier(String::new())
+    }
+
+    pub const fn int() -> Token {
+        Token::IntLiteral(0)
+    }
+
+    pub const fn bool() -> Token {
+        Token::BoolLiteral(false)
+    }
+
+    pub const fn string() -> Token {
+        Token::StringLiteral(String::new())
     }
 }
 
@@ -504,8 +548,7 @@ mod tests {
                 Token::Proc,
                 Token::Identifier("max".to_string()),
                 Token::LParen,
-                Token::Identifier("int".to_string()),
-                Token::DotDot,
+                Token::Identifier("int..".to_string()),
                 Token::Identifier("arr".to_string()),
                 Token::RParen,
                 Token::Arrow,
@@ -540,8 +583,7 @@ mod tests {
         assert_token_stream(
             "int.. a = [1, 2, 3]",
             vec![
-                Token::Identifier("int".to_string()),
-                Token::DotDot,
+                Token::Identifier("int..".to_string()),
                 Token::Identifier("a".to_string()),
                 Token::Assign,
                 Token::LBracket,

@@ -253,6 +253,8 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "inkwell",
+ "lazy_static",
+ "once_cell",
  "tempfile",
 ]
 
