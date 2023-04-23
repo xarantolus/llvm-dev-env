@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{error::Error, fmt::Display, num::ParseIntError};
+use std::fmt::Display;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
@@ -136,252 +136,6 @@ impl Display for Token {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum LexErrorType {
-    InvalidToken(String),
-    InvalidNumber(ParseIntError),
-    InvalidStringEscape(char),
-    UnexpectedEOF(Token),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct LexError {
-    pub error_type: LexErrorType,
-    pub line: usize,
-    pub column: usize,
-}
-
-impl LexError {
-    fn new(error_type: LexErrorType, input: &str, pos: usize) -> Self {
-        let mut line = 1;
-        let mut column = 0;
-
-        for (i, c) in input.chars().enumerate() {
-            if i == pos {
-                break;
-            }
-
-            if c == '\n' {
-                line += 1;
-                column = 0;
-            } else {
-                column += 1;
-            }
-        }
-
-        Self {
-            error_type,
-            line,
-            column,
-        }
-    }
-}
-
-impl Error for LexError {}
-
-impl fmt::Display for LexError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.error_type {
-            LexErrorType::InvalidToken(ref token) => write!(f, "Invalid token: {:#?}", token),
-            LexErrorType::InvalidStringEscape(c) => {
-                write!(f, "Invalid string escape: {:#?} must not be escaped", c)
-            }
-            LexErrorType::UnexpectedEOF(ref token) => {
-                write!(f, "Unexpected EOF while parsing {} token", token)
-            }
-            LexErrorType::InvalidNumber(ref err) => write!(f, "Invalid number: {}", err),
-        }
-    }
-}
-
-impl Token {
-    fn lex_single_char(c: char, next_c: char) -> Option<(Token, usize)> {
-        Some(match c {
-            '(' => (Token::LParen, 1),
-            ')' => (Token::RParen, 1),
-            '[' => (Token::LBracket, 1),
-            ']' => (Token::RBracket, 1),
-            '{' => (Token::LBrace, 1),
-            '}' => (Token::RBrace, 1),
-            '-' => {
-                if next_c == '>' {
-                    (Token::Arrow, 2)
-                } else {
-                    (Token::Minus, 1)
-                }
-            }
-            '+' => (Token::Plus, 1),
-            '*' => (Token::Star, 1),
-            '/' => (Token::Slash, 1),
-            '%' => (Token::Percent, 1),
-            '=' => {
-                if next_c == '=' {
-                    (Token::Equality, 2)
-                } else {
-                    (Token::Assign, 1)
-                }
-            }
-            '<' => {
-                if next_c == '>' {
-                    (Token::NotEqual, 2)
-                } else if next_c == '=' {
-                    (Token::LessEqual, 2)
-                } else {
-                    (Token::Less, 1)
-                }
-            }
-            '>' => {
-                if next_c == '=' {
-                    (Token::GreaterEqual, 2)
-                } else {
-                    (Token::Greater, 1)
-                }
-            }
-            ';' => (Token::Semicolon, 1),
-            '.' => {
-                if next_c == '.' {
-                    (Token::DotDot, 2)
-                } else {
-                    return None;
-                    // (Token::Dot, 1)
-                }
-            }
-            '?' => (Token::Question, 1),
-            ':' => {
-                if next_c == ':' {
-                    (Token::DoubleColon, 2)
-                } else {
-                    (Token::Colon, 1)
-                }
-            }
-            ',' => (Token::Comma, 1),
-            '@' => (Token::At, 1),
-            _ => return None,
-        })
-    }
-
-    pub fn lex(input: &str, start: usize) -> Result<(Token, usize), LexError> {
-        let input = &input[start..];
-        if input.len() == 0 {
-            return Ok((Token::EOF, start));
-        }
-
-        let mut offset = 0;
-        // Skip leading whitespace in input
-        while offset < input.len() && input.chars().nth(offset).unwrap().is_whitespace() {
-            offset += 1;
-        }
-        if offset >= input.len() {
-            return Ok((Token::EOF, start));
-        }
-
-        // Check if token is a single character
-        let c = input.chars().nth(offset).unwrap();
-        let next_c = if offset + 1 < input.len() {
-            input.chars().nth(offset + 1).unwrap()
-        } else {
-            '\0'
-        };
-        if let Some(token) = Token::lex_single_char(c, next_c) {
-            return Ok((token.0, start + offset + token.1));
-        }
-
-        // Check if token is a string
-        if c == '"' {
-            let mut string = String::new();
-            offset += 1;
-
-            // Read the entire string and allow for escape characters
-            let mut escape = false;
-            loop {
-                if offset >= input.len() {
-                    return Err(LexError::new(
-                        LexErrorType::UnexpectedEOF(Token::StringLiteral(string)),
-                        input,
-                        start + offset,
-                    ));
-                }
-                let c = input.chars().nth(offset).unwrap();
-                if escape {
-                    match c {
-                        'n' => string.push('\n'),
-                        't' => string.push('\t'),
-                        '\\' => string.push('\\'),
-                        '"' => string.push('"'),
-                        _ => {
-                            return Err(LexError::new(
-                                LexErrorType::InvalidStringEscape(c),
-                                input,
-                                start,
-                            ));
-                        }
-                    }
-                    escape = false;
-                } else if c == '"' {
-                    break;
-                } else if c == '\\' {
-                    escape = true;
-                } else {
-                    string.push(c);
-                }
-                offset += 1;
-            }
-
-            return Ok((Token::StringLiteral(string), start + offset + 1));
-        }
-
-        // Check if token is a number
-        if c.is_digit(10) {
-            let mut number = String::new();
-
-            while offset < input.len() {
-                let c = input.chars().nth(offset).unwrap();
-                // basically allow digits and an 'x' for hex numbers 0x1234
-                if !(c.is_digit(16) || c == 'x') {
-                    break;
-                }
-                number.push(c);
-                offset += 1;
-            }
-
-            // Now parse it. We allow numbers with 0x prefix to be hex
-            if number.starts_with("0x") {
-                return match i64::from_str_radix(&number[2..], 16) {
-                    Ok(number) => Ok((Token::IntLiteral(number), start + offset)),
-                    Err(e) => Err(LexError::new(LexErrorType::InvalidNumber(e), input, start)),
-                };
-            }
-            return match i64::from_str_radix(&number, 10) {
-                Ok(number) => Ok((Token::IntLiteral(number), start + offset)),
-                Err(e) => Err(LexError::new(LexErrorType::InvalidNumber(e), input, start)),
-            };
-        }
-
-        // Otherwise we consume until the next whitespace OR occurence of a single character token
-        let mut iden = String::new();
-        while offset < input.len() {
-            let c = input.chars().nth(offset).unwrap();
-            if c.is_whitespace() || Token::lex_single_char(c, '\0').is_some() {
-                break;
-            }
-            iden.push(c);
-            offset += 1;
-        }
-
-        match iden.as_str() {
-            "proc" => Ok((Token::Proc, start + offset)),
-            "need" => Ok((Token::Need, start + offset)),
-            "include" => Ok((Token::Include, start + offset)),
-            "and" => Ok((Token::And, start + offset)),
-            "or" => Ok((Token::Or, start + offset)),
-            "not" => Ok((Token::Not, start + offset)),
-            "true" => Ok((Token::BoolLiteral(true), start + offset)),
-            "false" => Ok((Token::BoolLiteral(false), start + offset)),
-            _ => Ok((Token::Identifier(iden), start + offset)),
-        }
-    }
-}
-
 impl Token {
     pub const IDEN: Token = Token::Identifier(String::new());
 
@@ -405,6 +159,8 @@ impl Token {
 
 #[cfg(test)]
 mod tests {
+    use crate::lexer::lexer::Lexer;
+
     use super::*;
     use std::vec;
 
@@ -413,7 +169,7 @@ mod tests {
         let mut tok_pos = 0;
 
         while tok_pos < tokens.len() {
-            let (token, next) = Token::lex(s, str_pos).expect("Failed to lex token");
+            let (token, next) = Lexer::lex(s, str_pos).expect("Failed to lex token");
 
             assert_eq!(
                 token, tokens[tok_pos],
@@ -427,7 +183,7 @@ mod tests {
         assert_eq!(tok_pos, tokens.len());
 
         // Make sure the last thing is an EOF
-        assert_eq!(Token::lex(s, str_pos).unwrap().0, Token::EOF);
+        assert_eq!(Lexer::lex(s, str_pos).unwrap().0, Token::EOF);
     }
 
     #[test]
@@ -471,7 +227,7 @@ mod tests {
 
         let mut pos = 0;
         loop {
-            let (token, next) = Token::lex(program, pos).expect("Failed to lex token");
+            let (token, next) = Lexer::lex(program, pos).expect("Failed to lex token");
             if token == Token::EOF {
                 assert!(next == program.len(), "Didn't lex entire program");
                 break;
