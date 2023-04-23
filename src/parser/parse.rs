@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Debug};
 
 use crate::lexer::lex::{LexError, Token};
 
-use super::{util, ast::Expr};
+use super::{ast::Expr, util};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ParseErrorType {
@@ -11,6 +11,15 @@ pub enum ParseErrorType {
         prefix: Expr,
         current: Token,
         expected: Vec<Expr>,
+    },
+    StatementAfterExpressionInBlock {
+        prefix: Expr,
+    },
+    ExpectedType {
+        prefix: Expr,
+    },
+    ExpectedAssignableExpression {
+        prefix: Option<Expr>,
     },
     InvalidToken(Token, Vec<Token>),
     LexError(LexError),
@@ -70,6 +79,21 @@ impl fmt::Display for ParseError {
                 "Unknown prefix {:?} at line {} column {} for current token {:?}. Expected one of {:?}",
                 prefix, self.line, self.column, current, expected
             ),
+            ParseErrorType::ExpectedAssignableExpression { ref prefix } => write!(
+                f,
+                "Expected assignable expression at line {} column {}, but got {:?}",
+                self.line, self.column, prefix
+            ),
+            ParseErrorType::StatementAfterExpressionInBlock { ref prefix } => write!(
+                f,
+                "Expression {:?} ends block, but found further statements at line {} column {}",
+                prefix, self.line, self.column
+            ),
+            ParseErrorType::ExpectedType { ref prefix } => write!(
+                f,
+                "Expected type at line {} column {}, but got {:?}",
+                self.line, self.column, prefix
+            ),
         }
     }
 }
@@ -91,6 +115,10 @@ impl Parser {
             input_file: input,
             current_position: 0,
         }
+    }
+
+    pub fn rewind(&mut self, pos: usize) {
+        self.current_position = pos;
     }
 
     fn peek_next_impl(
@@ -158,7 +186,7 @@ impl Parser {
 
     /// Skip a token of the specified type, returning an error if the next token is not of the specified type
     pub fn skip_token(&mut self, token: Token) -> Result<(), ParseError> {
-        let (token, pos) = self.peek_next_impl(vec![token])?;
+        let (_token, pos) = self.peek_next_impl(vec![token])?;
         self.current_position = pos;
         Ok(())
     }

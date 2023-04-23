@@ -1,5 +1,5 @@
 proc main(str.. args) -> int {
-	print("Hello, World")
+	print("Hello, World");
 
 	0
 }
