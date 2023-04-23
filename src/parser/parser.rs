@@ -317,6 +317,7 @@ impl Program {
                 // but have different precedence. So we need to reorganize the tree
                 // This e.g. happens for 1 * 2 + 3
 
+                // TODO: This might be wrong - see "a" test
                 if let Expr::BinOp {
                     left: second_left,
                     op: second_binop_type,

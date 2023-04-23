@@ -129,7 +129,10 @@ mod tests {
                 }],
             },
         );
+    }
 
+    #[test]
+    fn a() {
         assert_program_equals(
             r#"proc main() -> int {
                 ? 1593 * (3 * 3) - 3 == 15 {
