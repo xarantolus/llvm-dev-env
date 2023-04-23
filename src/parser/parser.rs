@@ -22,14 +22,16 @@ const TOK_STRING: Token = Token::StringLiteral(String::new());
 const TOK_BOOL: Token = Token::BoolLiteral(false);
 
 impl Program {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             functions: Vec::new(),
         }
     }
 
-    pub fn parse(&mut self, file: String) -> Result<Program, ParseError> {
-        let mut parser = Lexer::new(file.clone());
+    pub fn parse(file: &str) -> Result<Program, ParseError> {
+        let mut program = Self::new();
+
+        let mut parser = Lexer::new(file);
 
         let top_lvl_tokens = vec![Token::Proc, Token::EOF];
 
@@ -40,7 +42,7 @@ impl Program {
                 Token::Proc => {
                     // Parse function
                     let function = Self::parse_function(&mut parser)?;
-                    self.functions.push(function);
+                    program.functions.push(function);
                 }
                 Token::EOF => {
                     // End of file
@@ -52,7 +54,7 @@ impl Program {
             }
         }
 
-        Ok(self.clone())
+        Ok(program)
     }
 
     fn parse_function(parser: &mut Lexer) -> Result<Function, ParseError> {
@@ -420,17 +422,13 @@ mod tests {
 
     #[test]
     fn hello_world() {
-        let file = include_str!("../../testdata/hello-world.l").to_string();
-        let mut program = Program::new();
-        program.parse(file).expect("Failed to parse program");
+        let file = include_str!("../../testdata/hello-world.l");
+        let program = Program::parse(file).expect("Failed to parse program");
         println!("{:#?}", program);
     }
 
     fn assert_ast(file: &str, expected: Program) {
-        let mut program = Program::new();
-        program
-            .parse(file.to_string())
-            .expect("Failed to parse program");
+        let program = Program::parse(file).expect("Failed to parse program");
         assert_eq!(
             program, expected,
             "Expected AST:\n{:#?}\nGot AST: {:#?}",
@@ -457,16 +455,13 @@ mod tests {
 
     #[test]
     fn function_call() {
-        let mut program = Program::new();
-        let stmt = program
-            .parse(
-                r#"
+        let stmt = Program::parse(
+            r#"
             proc main() -> int {
                 print("Hello World");
-            }"#
-                .to_string(),
-            )
-            .unwrap();
+            }"#,
+        )
+        .unwrap();
 
         assert_eq!(
             stmt,
@@ -486,7 +481,7 @@ mod tests {
 
     #[test]
     fn expr() {
-        let mut program = Lexer::new(r#"f(1, x)"#.to_string());
+        let mut program = Lexer::new(r#"f(1, x)"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
@@ -496,7 +491,7 @@ mod tests {
             )
         );
 
-        let mut program = Lexer::new(r#"1 + 2"#.to_string());
+        let mut program = Lexer::new(r#"1 + 2"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
@@ -508,7 +503,7 @@ mod tests {
         );
 
         // Check binop order
-        let mut program = Lexer::new(r#"1 + 2 * 3"#.to_string());
+        let mut program = Lexer::new(r#"1 + 2 * 3"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
@@ -524,7 +519,7 @@ mod tests {
         );
 
         // Same for other direction
-        let mut program = Lexer::new(r#"1 * 2 + 3"#.to_string());
+        let mut program = Lexer::new(r#"1 * 2 + 3"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
@@ -540,7 +535,7 @@ mod tests {
         );
 
         // Array indexing
-        let mut program = Lexer::new(r#"arr @ 0"#.to_string());
+        let mut program = Lexer::new(r#"arr @ 0"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
@@ -551,7 +546,7 @@ mod tests {
         );
 
         // Array indexing with expression
-        let mut program = Lexer::new(r#"arr @ 0 + 1"#.to_string());
+        let mut program = Lexer::new(r#"arr @ 0 + 1"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
@@ -565,7 +560,7 @@ mod tests {
             )
         );
 
-        let mut program = Lexer::new(r#"arr @ arr @ 0"#.to_string());
+        let mut program = Lexer::new(r#"arr @ arr @ 0"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
@@ -578,7 +573,7 @@ mod tests {
             )
         );
 
-        let mut program = Lexer::new(r#"1 <= 2"#.to_string());
+        let mut program = Lexer::new(r#"1 <= 2"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
@@ -594,8 +589,7 @@ mod tests {
             1
         } : {
             2
-        }"#
-            .to_string(),
+        }"#,
         );
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
@@ -614,7 +608,7 @@ mod tests {
 
     #[test]
     fn blocks() {
-        let mut program = Lexer::new(r#"{ int a = 5; a }"#.to_string());
+        let mut program = Lexer::new(r#"{ int a = 5; a }"#);
         let block = Program::parse_block(&mut program, false).unwrap();
         assert_eq!(
             block,
@@ -628,7 +622,7 @@ mod tests {
             ])
         );
 
-        let mut program = Lexer::new(r#"{ int.. a = [5]; a }"#.to_string());
+        let mut program = Lexer::new(r#"{ int.. a = [5]; a }"#);
         let block = Program::parse_block(&mut program, false).unwrap();
         assert_eq!(
             block,
@@ -642,7 +636,7 @@ mod tests {
             ])
         );
 
-        let mut program = Lexer::new(r#"{ int a = 5; int.. b = [7]; (b @ 0) + a }"#.to_string());
+        let mut program = Lexer::new(r#"{ int a = 5; int.. b = [7]; (b @ 0) + a }"#);
         let block = Program::parse_block(&mut program, false).unwrap();
         assert_eq!(
             block,

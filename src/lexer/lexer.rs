@@ -9,9 +9,9 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn new(input: String) -> Lexer {
+    pub fn new(input: &str) -> Lexer {
         Self {
-            input_file: input,
+            input_file: input.to_string(),
             current_position: 0,
         }
     }
@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn next_token() {
-        let mut parser = Lexer::new("1 + 2".to_string());
+        let mut parser = Lexer::new("1 + 2");
 
         assert_eq!(
             parser.next_token(vec![Token::IntLiteral(0)]),
@@ -301,7 +301,7 @@ mod tests {
 
     #[test]
     fn next_token_fail() {
-        let mut parser = Lexer::new("1 + 2".to_string());
+        let mut parser = Lexer::new("1 + 2");
 
         assert_eq!(
             parser.next_token(vec![Token::Plus]),
@@ -312,7 +312,7 @@ mod tests {
             ))
         );
 
-        parser = Lexer::new("1 + 2".to_string());
+        parser = Lexer::new("1 + 2");
 
         assert_eq!(
             parser.next_token(vec![Token::IntLiteral(0)]),
