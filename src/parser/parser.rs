@@ -294,7 +294,10 @@ impl Program {
                     }
                 }
 
-                Ok(Expr::FunctionCall(function_name, arguments))
+                Ok(Expr::FunctionCall {
+                    name: function_name,
+                    arguments,
+                })
             }
             Ok(binary_operator_token) => {
                 // Binary operators
@@ -314,35 +317,39 @@ impl Program {
                 // but have different precedence. So we need to reorganize the tree
                 // This e.g. happens for 1 * 2 + 3
 
-                if let Expr::BinOp(second_left, second_binop_type, second_right, parens) =
-                    second_expr.clone()
+                if let Expr::BinOp {
+                    left: second_left,
+                    op: second_binop_type,
+                    right: second_right,
+                    parens,
+                } = second_expr.clone()
                 {
                     // It's actually a correct binop type
                     if let Ok(second_binop) = BinOp::try_from(second_binop_type.clone()) {
                         // And the first binop has higher precedence than the second one
                         if !parens && first_binop_type.precedence() > second_binop.precedence() {
                             // So we need to reorganize the tree
-                            return Ok(Expr::BinOp(
-                                Box::new(Expr::BinOp(
-                                    Box::new(first_expr),
-                                    first_binop_type,
-                                    second_left,
-                                    false,
-                                )),
-                                second_binop_type,
-                                second_right,
-                                false,
-                            ));
+                            return Ok(Expr::BinOp {
+                                left: Box::new(Expr::BinOp {
+                                    left: Box::new(first_expr),
+                                    op: first_binop_type,
+                                    right: second_left,
+                                    parens: false,
+                                }),
+                                op: second_binop_type,
+                                right: second_right,
+                                parens: false,
+                            });
                         }
                     }
                 }
 
-                Ok(Expr::BinOp(
-                    Box::new(first_expr),
-                    first_binop_type,
-                    Box::new(second_expr),
-                    false,
-                ))
+                Ok(Expr::BinOp {
+                    left: Box::new(first_expr),
+                    op: first_binop_type,
+                    right: Box::new(second_expr),
+                    parens: false,
+                })
             }
         }
     }
@@ -369,7 +376,10 @@ impl Program {
                         parser.skip_token(Token::At)?;
                         let index = Self::parse_expression(parser)?;
 
-                        Expr::ArrayAccess(Box::new(expr), Box::new(index))
+                        Expr::ArrayAccess {
+                            array: Box::new(expr),
+                            index: Box::new(index),
+                        }
                     } else {
                         expr
                     }
@@ -377,9 +387,17 @@ impl Program {
                 // () and {} are pretty similar for expressions, so we can handle them the same way
                 tok @ (Token::LParen | Token::LBrace) => {
                     let mut expr = Self::parse_expression(parser)?;
-                    if let Expr::BinOp(left, op, right, _) = expr {
+                    if let Expr::BinOp {
+                        left, op, right, ..
+                    } = expr
+                    {
                         // We have a parenthesized expression
-                        expr = Expr::BinOp(left, op, right, true)
+                        expr = Expr::BinOp {
+                            left,
+                            op,
+                            right,
+                            parens: true,
+                        }
                     }
                     parser.skip_token(if tok == Token::LParen {
                         Token::RParen
@@ -483,10 +501,10 @@ mod tests {
                     name: "main".to_string(),
                     return_type: "int".to_string(),
                     parameters: vec![],
-                    body: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::FunctionCall(
-                        "print".to_string(),
-                        vec![Expr::StringLiteral("Hello World".to_string())]
-                    )))]),
+                    body: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::FunctionCall {
+                        name: "print".to_string(),
+                        arguments: vec![Expr::StringLiteral("Hello World".to_string())]
+                    }))]),
                 }],
             }
         );
@@ -498,22 +516,22 @@ mod tests {
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
-            Expr::FunctionCall(
-                "f".to_string(),
-                vec![Expr::IntLiteral(1), Expr::VariableAccess("x".to_string())]
-            )
+            Expr::FunctionCall {
+                name: "f".to_string(),
+                arguments: vec![Expr::IntLiteral(1), Expr::VariableAccess("x".to_string())]
+            }
         );
 
         let mut program = Lexer::new(r#"1 + 2"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
-            Expr::BinOp(
-                Box::new(Expr::IntLiteral(1)),
-                BinOp::Plus,
-                Box::new(Expr::IntLiteral(2)),
-                false
-            )
+            Expr::BinOp {
+                left: Box::new(Expr::IntLiteral(1)),
+                op: BinOp::Plus,
+                right: Box::new(Expr::IntLiteral(2)),
+                parens: false
+            }
         );
 
         // Check binop order
@@ -521,17 +539,17 @@ mod tests {
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
-            Expr::BinOp(
-                Box::new(Expr::IntLiteral(1)),
-                BinOp::Plus,
-                Box::new(Expr::BinOp(
-                    Box::new(Expr::IntLiteral(2)),
-                    BinOp::Multiply,
-                    Box::new(Expr::IntLiteral(3)),
-                    false
-                )),
-                false
-            )
+            Expr::BinOp {
+                left: Box::new(Expr::IntLiteral(1)),
+                op: BinOp::Plus,
+                right: Box::new(Expr::BinOp {
+                    left: Box::new(Expr::IntLiteral(2)),
+                    op: BinOp::Multiply,
+                    right: Box::new(Expr::IntLiteral(3)),
+                    parens: false
+                }),
+                parens: false
+            }
         );
 
         // Same for other direction
@@ -539,17 +557,17 @@ mod tests {
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
-            Expr::BinOp(
-                Box::new(Expr::BinOp(
-                    Box::new(Expr::IntLiteral(1)),
-                    BinOp::Multiply,
-                    Box::new(Expr::IntLiteral(2)),
-                    false
-                )),
-                BinOp::Plus,
-                Box::new(Expr::IntLiteral(3)),
-                false
-            )
+            Expr::BinOp {
+                left: Box::new(Expr::BinOp {
+                    left: Box::new(Expr::IntLiteral(1)),
+                    op: BinOp::Multiply,
+                    right: Box::new(Expr::IntLiteral(2)),
+                    parens: false
+                }),
+                op: BinOp::Plus,
+                right: Box::new(Expr::IntLiteral(3)),
+                parens: false
+            }
         );
 
         // Array indexing
@@ -557,10 +575,10 @@ mod tests {
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
-            Expr::ArrayAccess(
-                Box::new(Expr::VariableAccess("arr".to_string())),
-                Box::new(Expr::IntLiteral(0))
-            )
+            Expr::ArrayAccess {
+                array: Box::new(Expr::VariableAccess("arr".to_string())),
+                index: Box::new(Expr::IntLiteral(0))
+            }
         );
 
         // Array indexing with expression
@@ -568,40 +586,40 @@ mod tests {
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
-            Expr::ArrayAccess(
-                Box::new(Expr::VariableAccess("arr".to_string())),
-                Box::new(Expr::BinOp(
-                    Box::new(Expr::IntLiteral(0)),
-                    BinOp::Plus,
-                    Box::new(Expr::IntLiteral(1)),
-                    false
-                ))
-            )
+            Expr::ArrayAccess {
+                array: Box::new(Expr::VariableAccess("arr".to_string())),
+                index: Box::new(Expr::BinOp {
+                    left: Box::new(Expr::IntLiteral(0)),
+                    op: BinOp::Plus,
+                    right: Box::new(Expr::IntLiteral(1)),
+                    parens: false
+                })
+            }
         );
 
         let mut program = Lexer::new(r#"arr @ arr @ 0"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
-            Expr::ArrayAccess(
-                Box::new(Expr::VariableAccess("arr".to_string())),
-                Box::new(Expr::ArrayAccess(
-                    Box::new(Expr::VariableAccess("arr".to_string())),
-                    Box::new(Expr::IntLiteral(0))
-                ))
-            )
+            Expr::ArrayAccess {
+                array: Box::new(Expr::VariableAccess("arr".to_string())),
+                index: Box::new(Expr::ArrayAccess {
+                    array: Box::new(Expr::VariableAccess("arr".to_string())),
+                    index: Box::new(Expr::IntLiteral(0))
+                })
+            }
         );
 
         let mut program = Lexer::new(r#"1 <= 2"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
             expr,
-            Expr::BinOp(
-                Box::new(Expr::IntLiteral(1)),
-                BinOp::LessThanOrEqual,
-                Box::new(Expr::IntLiteral(2)),
-                false
-            )
+            Expr::BinOp {
+                left: Box::new(Expr::IntLiteral(1)),
+                op: BinOp::LessThanOrEqual,
+                right: Box::new(Expr::IntLiteral(2)),
+                parens: false
+            }
         );
 
         let mut program = Lexer::new(
@@ -615,12 +633,12 @@ mod tests {
         assert_eq!(
             expr,
             Expr::If {
-                condition: Box::new(Expr::BinOp(
-                    Box::new(Expr::VariableAccess("a".to_string())),
-                    BinOp::Equal,
-                    Box::new(Expr::VariableAccess("b".to_string())),
-                    false
-                )),
+                condition: Box::new(Expr::BinOp {
+                    left: Box::new(Expr::VariableAccess("a".to_string())),
+                    op: BinOp::Equal,
+                    right: Box::new(Expr::VariableAccess("b".to_string())),
+                    parens: false
+                }),
                 true_block: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::IntLiteral(1)))]),
                 false_block: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::IntLiteral(2)))])
             }
@@ -672,15 +690,15 @@ mod tests {
                     type_name: "int..".to_string(),
                     expr: Box::new(Expr::ArrayLiteral(vec![Expr::IntLiteral(7)])),
                 },
-                Stmt::Expr(Box::new(Expr::BinOp(
-                    Box::new(Expr::ArrayAccess(
-                        Box::new(Expr::VariableAccess("b".to_string())),
-                        Box::new(Expr::IntLiteral(0))
-                    )),
-                    BinOp::Plus,
-                    Box::new(Expr::VariableAccess("a".to_string())),
-                    false
-                )))
+                Stmt::Expr(Box::new(Expr::BinOp {
+                    left: Box::new(Expr::ArrayAccess {
+                        array: Box::new(Expr::VariableAccess("b".to_string())),
+                        index: Box::new(Expr::IntLiteral(0))
+                    }),
+                    op: BinOp::Plus,
+                    right: Box::new(Expr::VariableAccess("a".to_string())),
+                    parens: false
+                }))
             ])
         );
     }

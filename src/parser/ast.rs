@@ -97,12 +97,21 @@ pub enum Expr {
     BoolLiteral(bool),
     ArrayLiteral(Vec<Expr>),
 
-    ArrayAccess(Box<Expr>, Box<Expr>),
+    ArrayAccess {
+        array: Box<Expr>,
+        index: Box<Expr>,
+    },
     VariableAccess(String),
-    FunctionCall(String, Vec<Expr>),
-
-    BinOp(Box<Expr>, BinOp, Box<Expr>, bool),
-
+    FunctionCall {
+        name: String,
+        arguments: Vec<Expr>,
+    },
+    BinOp {
+        left: Box<Expr>,
+        op: BinOp,
+        right: Box<Expr>,
+        parens: bool,
+    },
     If {
         condition: Box<Expr>,
         true_block: Stmt,
@@ -114,7 +123,7 @@ impl Expr {
     pub fn is_assignable(&self) -> bool {
         match self {
             Expr::VariableAccess(_) => true,
-            Expr::ArrayAccess(_, _) => true,
+            Expr::ArrayAccess { .. } => true,
             _ => false,
         }
     }

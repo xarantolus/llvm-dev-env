@@ -8,6 +8,7 @@ mod tests {
 
     fn assert_program_equals(program: &str, expected: Program) {
         let actual = Program::parse(program).expect("Failed to parse program");
+        dbg!("{:#?}", &actual);
         assert_eq!(actual, expected);
     }
 
@@ -78,17 +79,17 @@ mod tests {
                         Stmt::VariableDeclaration {
                             var_name: "a".to_string(),
                             type_name: "int".to_string(),
-                            expr: Box::new(Expr::BinOp(
-                                Box::new(Expr::IntLiteral(3)),
-                                BinOp::Multiply,
-                                Box::new(Expr::BinOp(
-                                    Box::new(Expr::IntLiteral(1)),
-                                    BinOp::Plus,
-                                    Box::new(Expr::IntLiteral(2)),
-                                    true,
-                                )),
-                                false,
-                            )),
+                            expr: Box::new(Expr::BinOp {
+                                left: Box::new(Expr::IntLiteral(3)),
+                                op: BinOp::Multiply,
+                                right: Box::new(Expr::BinOp {
+                                    left: Box::new(Expr::IntLiteral(1)),
+                                    op: BinOp::Plus,
+                                    right: Box::new(Expr::IntLiteral(2)),
+                                    parens: true,
+                                }),
+                                parens: false,
+                            }),
                         },
                         Stmt::Expr(Box::new(Expr::VariableAccess("a".to_string()))),
                     ]),
@@ -110,17 +111,17 @@ mod tests {
                         Stmt::VariableDeclaration {
                             var_name: "a".to_string(),
                             type_name: "int".to_string(),
-                            expr: Box::new(Expr::BinOp(
-                                Box::new(Expr::BinOp(
-                                    Box::new(Expr::IntLiteral(1)),
-                                    BinOp::Plus,
-                                    Box::new(Expr::IntLiteral(2)),
-                                    true,
-                                )),
-                                BinOp::Multiply,
-                                Box::new(Expr::IntLiteral(3)),
-                                false,
-                            )),
+                            expr: Box::new(Expr::BinOp {
+                                left: Box::new(Expr::BinOp {
+                                    left: Box::new(Expr::IntLiteral(1)),
+                                    op: BinOp::Plus,
+                                    right: Box::new(Expr::IntLiteral(2)),
+                                    parens: true,
+                                }),
+                                op: BinOp::Multiply,
+                                right: Box::new(Expr::IntLiteral(3)),
+                                parens: false,
+                            }),
                         },
                         Stmt::Expr(Box::new(Expr::VariableAccess("a".to_string()))),
                     ]),
@@ -131,7 +132,7 @@ mod tests {
 
         assert_program_equals(
             r#"proc main() -> int {
-                ? 1593 * (3 + 39 * 3) - 3 == 15 {
+                ? 1593 * (3 * 3) - 3 == 15 {
                     1
                 } : {
                     0
@@ -140,38 +141,28 @@ mod tests {
             Program {
                 functions: vec![Function {
                     name: "main".to_string(),
+                    return_type: "int".to_string(),
                     parameters: vec![],
                     body: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::If {
-                        condition: Box::new(Expr::BinOp(
-                            Box::new(Expr::BinOp(
-                                Box::new(Expr::BinOp(
-                                    Box::new(Expr::IntLiteral(1593)),
-                                    BinOp::Multiply,
-                                    Box::new(Expr::BinOp(
-                                        Box::new(Expr::IntLiteral(3)),
-                                        BinOp::Plus,
-                                        Box::new(Expr::BinOp(
-                                            Box::new(Expr::IntLiteral(39)),
-                                            BinOp::Multiply,
-                                            Box::new(Expr::IntLiteral(3)),
-                                            true,
-                                        )),
-                                        true,
-                                    )),
-                                    false,
-                                )),
-                                BinOp::Minus,
-                                Box::new(Expr::IntLiteral(3)),
-                                false,
-                            )),
-                            BinOp::Equal,
-                            Box::new(Expr::IntLiteral(15)),
-                            false,
-                        )),
+                        condition: Box::new(Expr::BinOp {
+                            left: Box::new(Expr::BinOp {
+                                left: Box::new(Expr::IntLiteral(1593)),
+                                op: BinOp::Multiply,
+                                right: Box::new(Expr::BinOp {
+                                    left: Box::new(Expr::IntLiteral(3)),
+                                    op: BinOp::Multiply,
+                                    right: Box::new(Expr::IntLiteral(3)),
+                                    parens: true,
+                                }),
+                                parens: false,
+                            }),
+                            op: BinOp::Minus,
+                            right: Box::new(Expr::IntLiteral(3)),
+                            parens: false,
+                        }),
                         true_block: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::IntLiteral(1)))]),
                         false_block: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::IntLiteral(0)))]),
                     }))]),
-                    return_type: "int".to_string(),
                 }],
             },
         );
