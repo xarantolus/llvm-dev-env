@@ -3,7 +3,7 @@
 debug:
 	cargo build
 
-release:
+release: test
 	cargo build --release
 
 test:
