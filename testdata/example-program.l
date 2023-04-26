@@ -1,26 +1,9 @@
-include "other.file";
-
-need
-	- std::list::*;
-	- std::io::print;
-	- std::str;
-
 
 proc factorial(int n) -> int {
 	? n == 0 {
 		1
 	} : {
 		n * factorial(n-1)
-	}
-}
-
-proc max(int.. arr) -> int {
-	arr -> reduce acc, elem {
-		? acc > elem {
-			 acc
-		} : {
-			elem
-		}
 	}
 }
 
