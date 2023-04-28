@@ -97,7 +97,10 @@ mod tests {
                 }],
             },
         );
+    }
 
+    #[test]
+    fn math_order_of_operations_2() {
         assert_program_equals(
             r#"proc main() -> int {
                 int a = (1 + 2) * 3;
@@ -132,7 +135,7 @@ mod tests {
     }
 
     #[test]
-    fn a() {
+    fn if_expr_in_function() {
         assert_program_equals(
             r#"proc main() -> int {
                 ? 1593 * (3 * 3) - 3 == 15 {

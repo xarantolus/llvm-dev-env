@@ -318,39 +318,15 @@ impl Program {
                 // This e.g. happens for 1 * 2 + 3
 
                 // TODO: This might be wrong - see "a" test
-                if let Expr::BinOp {
-                    left: second_left,
-                    op: second_binop_type,
-                    right: second_right,
-                    parens,
-                } = second_expr.clone()
-                {
-                    // It's actually a correct binop type
-                    if let Ok(second_binop) = BinOp::try_from(second_binop_type.clone()) {
-                        // And the first binop has higher precedence than the second one
-                        if !parens && first_binop_type.precedence() > second_binop.precedence() {
-                            // So we need to reorganize the tree
-                            return Ok(Expr::BinOp {
-                                left: Box::new(Expr::BinOp {
-                                    left: Box::new(first_expr),
-                                    op: first_binop_type,
-                                    right: second_left,
-                                    parens: false,
-                                }),
-                                op: second_binop_type,
-                                right: second_right,
-                                parens: false,
-                            });
-                        }
-                    }
-                }
 
-                Ok(Expr::BinOp {
+                let new_expr = Expr::BinOp {
                     left: Box::new(first_expr),
                     op: first_binop_type,
                     right: Box::new(second_expr),
                     parens: false,
-                })
+                };
+
+                Ok(Expr::reorder_binops(new_expr))
             }
         }
     }
@@ -512,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    fn expr() {
+    fn fn_call() {
         let mut program = Lexer::new(r#"f(1, x)"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
@@ -522,7 +498,9 @@ mod tests {
                 arguments: vec![Expr::IntLiteral(1), Expr::VariableAccess("x".to_string())]
             }
         );
-
+    }
+    #[test]
+    fn addition() {
         let mut program = Lexer::new(r#"1 + 2"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
@@ -534,10 +512,14 @@ mod tests {
                 parens: false
             }
         );
+    }
 
+    #[test]
+    fn binop_order_mul() {
         // Check binop order
         let mut program = Lexer::new(r#"1 + 2 * 3"#);
         let expr = Program::parse_expression(&mut program).unwrap();
+        dbg!(&expr);
         assert_eq!(
             expr,
             Expr::BinOp {
@@ -552,10 +534,14 @@ mod tests {
                 parens: false
             }
         );
+    }
 
+    #[test]
+    fn binop_order_mul2() {
         // Same for other direction
         let mut program = Lexer::new(r#"1 * 2 + 3"#);
         let expr = Program::parse_expression(&mut program).unwrap();
+        dbg!(&expr);
         assert_eq!(
             expr,
             Expr::BinOp {
@@ -570,7 +556,10 @@ mod tests {
                 parens: false
             }
         );
+    }
 
+    #[test]
+    fn arr_index() {
         // Array indexing
         let mut program = Lexer::new(r#"arr @ 0"#);
         let expr = Program::parse_expression(&mut program).unwrap();
@@ -581,7 +570,10 @@ mod tests {
                 index: Box::new(Expr::IntLiteral(0))
             }
         );
+    }
 
+    #[test]
+    fn arr_index_expr() {
         // Array indexing with expression
         let mut program = Lexer::new(r#"arr @ 0 + 1"#);
         let expr = Program::parse_expression(&mut program).unwrap();
@@ -597,7 +589,10 @@ mod tests {
                 })
             }
         );
+    }
 
+    #[test]
+    fn arr_double_index() {
         let mut program = Lexer::new(r#"arr @ arr @ 0"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
@@ -610,7 +605,10 @@ mod tests {
                 })
             }
         );
+    }
 
+    #[test]
+    fn binop_order_leq() {
         let mut program = Lexer::new(r#"1 <= 2"#);
         let expr = Program::parse_expression(&mut program).unwrap();
         assert_eq!(
@@ -622,7 +620,10 @@ mod tests {
                 parens: false
             }
         );
+    }
 
+    #[test]
+    fn if_equals() {
         let mut program = Lexer::new(
             r#"? a == b {
             1

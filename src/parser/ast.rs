@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 use crate::lexer::token::Token;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -90,6 +92,28 @@ impl BinOp {
     }
 }
 
+impl Display for BinOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            BinOp::Plus => write!(f, "+"),
+            BinOp::Minus => write!(f, "-"),
+            BinOp::Multiply => write!(f, "*"),
+            BinOp::Divide => write!(f, "/"),
+            BinOp::Modulo => write!(f, "%"),
+
+            BinOp::And => write!(f, "and"),
+            BinOp::Or => write!(f, "or"),
+
+            BinOp::Equal => write!(f, "=="),
+            BinOp::NotEqual => write!(f, "!="),
+            BinOp::LessThan => write!(f, "<"),
+            BinOp::LessThanOrEqual => write!(f, "<="),
+            BinOp::GreaterThan => write!(f, ">"),
+            BinOp::GreaterThanOrEqual => write!(f, ">="),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     StringLiteral(String),
@@ -127,6 +151,177 @@ impl Expr {
             _ => false,
         }
     }
+
+    pub fn precedence(&self) -> u8 {
+        match self {
+            Expr::BinOp { op, .. } => op.precedence(),
+            _ => u8::MAX,
+        }
+    }
+
+    pub fn reorder_binops(self: Expr) -> Expr {
+        // An expression tree is not necessarily correct after parsing, because the parser
+        // does not take precedence into account. This function reorders the tree
+        let Expr::BinOp { left: c_left, op: c_op, right: c_right, parens: c_parens } = self.clone() else {
+            return self;
+        };
+
+        // Center is a binop. If on the left or on the right there are BinOps, we have to check if we need to
+        // reorder them.
+        match (*c_left.clone(), *c_right.clone()) {
+            (
+                Expr::BinOp {
+                    left: l_left,
+                    op: l_op,
+                    right: l_right,
+                    parens: l_parens,
+                },
+                Expr::BinOp {
+                    left: r_left,
+                    op: r_op,
+                    right: r_right,
+                    parens: r_parens,
+                },
+            ) => {
+                // E.g. "a+b*c+d", "a*b+c*d", "a+b*c+d*e", "a*b+c*d+e"
+                if c_op.precedence() > l_op.precedence() {
+                    // E.g. "a+b*c+d", "a+b*c+d*e"
+                    Expr::BinOp {
+                        left: Box::new(Expr::BinOp {
+                            left: l_left,
+                            op: l_op,
+                            right: l_right,
+                            parens: l_parens,
+                        }),
+                        op: c_op,
+                        right: c_right,
+                        parens: c_parens,
+                    }
+                } else if c_op.precedence() > r_op.precedence() {
+                    // E.g. "a*b+c*d", "a*b+c*d+e"
+                    Expr::BinOp {
+                        left: c_left,
+                        op: c_op,
+                        right: Box::new(Expr::BinOp {
+                            left: r_left,
+                            op: r_op,
+                            right: r_right,
+                            parens: r_parens,
+                        }),
+                        parens: c_parens,
+                    }
+                } else {
+                    // E.g. "a+b*c+d", "a*b+c*d", "a+b*c+d*e", "a*b+c*d+e"
+                    Expr::BinOp {
+                        left: Box::new(Expr::BinOp {
+                            left: l_left,
+                            op: l_op,
+                            right: l_right,
+                            parens: l_parens,
+                        }),
+                        op: c_op,
+                        right: Box::new(Expr::BinOp {
+                            left: r_left,
+                            op: r_op,
+                            right: r_right,
+                            parens: r_parens,
+                        }),
+                        parens: c_parens,
+                    }
+                }
+            }
+            (c_left @ Expr::BinOp { .. }, _) => {
+                let c_left = c_left.reorder_binops();
+                // E.g. "a+b*c" or "a*b+c"
+                let has_parens = match c_left {
+                    Expr::BinOp { parens, .. } => parens,
+                    _ => false,
+                };
+                if c_op.precedence() > c_left.precedence() && !has_parens {
+                    let Expr::BinOp { left: l_left, op: l_op, right: l_right, parens: l_parens } = c_left else {
+                        panic!("This should never happen");
+                    };
+
+                    // E.g. "1 + 2 * 3" would previously be "(1 + 2) * 3", but we reorder it to "1 + (2 * 3)"
+                    Expr::BinOp {
+                        left: Box::new(Expr::BinOp {
+                            left: l_left,
+                            op: l_op,
+                            right: l_right,
+                            parens: l_parens,
+                        }),
+                        op: c_op,
+                        right: c_right,
+                        parens: c_parens,
+                    }
+                } else {
+                    // E.g. "a*b+c"
+                    Expr::BinOp {
+                        left: Box::new(c_left),
+                        op: c_op,
+                        right: c_right,
+                        parens: c_parens,
+                    }
+                }
+            }
+            (_, c_right @ Expr::BinOp { .. }) => {
+                let c_right = c_right.reorder_binops();
+
+                // E.g. "a+b*c" or "a*b+c"
+                let has_parens = match c_right {
+                    Expr::BinOp { parens, .. } => parens,
+                    _ => false,
+                };
+                if c_op.precedence() > c_right.precedence() && !has_parens {
+                    let Expr::BinOp { left: r_left, op: r_op, right: r_right, parens: r_parens } = c_right else {
+                        panic!("This should never happen");
+                    };
+
+                    // E.g. "1 * 2 + 3" would previously be "1 * (2 + 3)", but we reorder it to "(1 * 2) + 3"
+                    Expr::BinOp {
+                        left: Box::new(Expr::BinOp {
+                            left: c_left,
+                            op: c_op,
+                            right: r_left,
+                            parens: c_parens,
+                        }),
+                        op: r_op,
+                        right: r_right,
+                        parens: c_parens,
+                    }
+                } else {
+                    // E.g. "a*b+c"
+                    Expr::BinOp {
+                        left: c_left,
+                        op: c_op,
+                        right: Box::new(c_right),
+                        parens: c_parens,
+                    }
+                }
+            }
+            _ => {
+                // Neither left nor right are BinOps. We don't need to reorder anything
+                return self;
+            }
+        }
+    }
+
+    // Adds parentheses around all BinOps in this expression
+    pub fn add_parens(&mut self) {
+        match self {
+            Expr::BinOp {
+                left,
+                op: _,
+                right,
+                parens,
+            } => {
+                left.add_parens();
+                right.add_parens();
+                *parens = true;
+            }
+            _ => {}
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -145,6 +340,29 @@ pub enum Stmt {
     Expr(Box<Expr>),
 }
 
+impl Display for Stmt {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Stmt::VariableDeclaration {
+                type_name,
+                var_name,
+                expr,
+            } => {
+                write!(f, "{} {} = {}", type_name, var_name, expr)
+            }
+            Stmt::Assignment { to, expr } => write!(f, "{} = {}", to, expr),
+            Stmt::Block(stmts) => {
+                write!(f, "{{")?;
+                for stmt in stmts {
+                    write!(f, "{}\n", stmt)?;
+                }
+                write!(f, "}}")
+            }
+            Stmt::Expr(expr) => write!(f, "{}", expr),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub name: String,
@@ -159,4 +377,62 @@ pub struct Function {
 pub struct Parameter {
     pub name: String,
     pub type_name: String,
+}
+
+impl Display for Expr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::StringLiteral(value) => write!(f, "{:?}", value),
+            Expr::IntLiteral(value) => write!(f, "{}", value),
+            Expr::BoolLiteral(value) => write!(f, "{}", value),
+            Expr::ArrayLiteral(values) => {
+                write!(f, "[")?;
+                for (i, value) in values.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", value)?;
+                }
+                write!(f, "]")
+            }
+            Expr::ArrayAccess { array, index } => write!(f, "{} @ {}", array, index),
+            Expr::VariableAccess(name) => write!(f, "{}", name),
+            Expr::FunctionCall { name, arguments } => {
+                write!(f, "{}(", name)?;
+                for (i, arg) in arguments.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ")")
+            }
+            Expr::BinOp {
+                left,
+                op,
+                right,
+                parens,
+            } => {
+                if *parens {
+                    write!(f, "(")?;
+                }
+                write!(f, "{} {} {}", left, op, right)?;
+                if *parens {
+                    write!(f, ")")?;
+                }
+                Ok(())
+            }
+            Expr::If {
+                condition,
+                true_block,
+                false_block,
+            } => {
+                write!(
+                    f,
+                    "if {} {{ {} }} else {{ {} }}",
+                    condition, true_block, false_block
+                )
+            }
+        }
+    }
 }
