@@ -273,7 +273,7 @@ impl Expr {
                     _ => false,
                 };
                 if c_op.precedence() > c_right.precedence() && !has_parens {
-                    let Expr::BinOp { left: r_left, op: r_op, right: r_right, parens: r_parens } = c_right else {
+                    let Expr::BinOp { left: r_left, op: r_op, right: r_right, parens: _ } = c_right else {
                         panic!("This should never happen");
                     };
 

@@ -435,7 +435,7 @@ mod tests {
         println!("{:#?}", program);
     }
 
-    fn assert_ast(file: &str, expected: Program) {
+    fn assert_program_equal(file: &str, expected: Program) {
         let program = Program::parse(file).expect("Failed to parse program");
         assert_eq!(
             program, expected,
@@ -444,9 +444,19 @@ mod tests {
         );
     }
 
+    fn assert_expression_equal(file: &str, expected: Expr) {
+        let mut lex = Lexer::new(file);
+        let expr = Program::parse_expression(&mut lex).expect("Failed to parse expression");
+        assert_eq!(
+            expr, expected,
+            "Expected AST:\n{:#?}\nGot AST: {:#?}",
+            expected, expr
+        );
+    }
+
     #[test]
     fn simple_function() {
-        assert_ast(
+        assert_program_equal(
             r#"proc main() -> int {
                 0
             }"#,
@@ -463,16 +473,11 @@ mod tests {
 
     #[test]
     fn function_call() {
-        let stmt = Program::parse(
+        assert_program_equal(
             r#"
             proc main() -> int {
                 print("Hello World");
             }"#,
-        )
-        .unwrap();
-
-        assert_eq!(
-            stmt,
             Program {
                 functions: vec![Function {
                     name: "main".to_string(),
@@ -480,48 +485,41 @@ mod tests {
                     parameters: vec![],
                     body: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::FunctionCall {
                         name: "print".to_string(),
-                        arguments: vec![Expr::StringLiteral("Hello World".to_string())]
+                        arguments: vec![Expr::StringLiteral("Hello World".to_string())],
                     }))]),
                 }],
-            }
+            },
         );
     }
 
     #[test]
     fn fn_call() {
-        let mut program = Lexer::new(r#"f(1, x)"#);
-        let expr = Program::parse_expression(&mut program).unwrap();
-        assert_eq!(
-            expr,
+        assert_expression_equal(
+            r#"f(1, x)"#,
             Expr::FunctionCall {
                 name: "f".to_string(),
-                arguments: vec![Expr::IntLiteral(1), Expr::VariableAccess("x".to_string())]
-            }
+                arguments: vec![Expr::IntLiteral(1), Expr::VariableAccess("x".to_string())],
+            },
         );
     }
     #[test]
     fn addition() {
-        let mut program = Lexer::new(r#"1 + 2"#);
-        let expr = Program::parse_expression(&mut program).unwrap();
-        assert_eq!(
-            expr,
+        assert_expression_equal(
+            r#"1 + 2"#,
             Expr::BinOp {
                 left: Box::new(Expr::IntLiteral(1)),
                 op: BinOp::Plus,
                 right: Box::new(Expr::IntLiteral(2)),
-                parens: false
-            }
+                parens: false,
+            },
         );
     }
 
     #[test]
     fn binop_order_mul() {
         // Check binop order
-        let mut program = Lexer::new(r#"1 + 2 * 3"#);
-        let expr = Program::parse_expression(&mut program).unwrap();
-        dbg!(&expr);
-        assert_eq!(
-            expr,
+        assert_expression_equal(
+            r#"1 + 2 * 3"#,
             Expr::BinOp {
                 left: Box::new(Expr::IntLiteral(1)),
                 op: BinOp::Plus,
@@ -529,121 +527,106 @@ mod tests {
                     left: Box::new(Expr::IntLiteral(2)),
                     op: BinOp::Multiply,
                     right: Box::new(Expr::IntLiteral(3)),
-                    parens: false
+                    parens: false,
                 }),
-                parens: false
-            }
+                parens: false,
+            },
         );
     }
 
     #[test]
     fn binop_order_mul2() {
         // Same for other direction
-        let mut program = Lexer::new(r#"1 * 2 + 3"#);
-        let expr = Program::parse_expression(&mut program).unwrap();
-        dbg!(&expr);
-        assert_eq!(
-            expr,
+        assert_expression_equal(
+            r#"1 * 2 + 3"#,
             Expr::BinOp {
                 left: Box::new(Expr::BinOp {
                     left: Box::new(Expr::IntLiteral(1)),
                     op: BinOp::Multiply,
                     right: Box::new(Expr::IntLiteral(2)),
-                    parens: false
+                    parens: false,
                 }),
                 op: BinOp::Plus,
                 right: Box::new(Expr::IntLiteral(3)),
-                parens: false
-            }
+                parens: false,
+            },
         );
     }
 
     #[test]
     fn arr_index() {
         // Array indexing
-        let mut program = Lexer::new(r#"arr @ 0"#);
-        let expr = Program::parse_expression(&mut program).unwrap();
-        assert_eq!(
-            expr,
+        assert_expression_equal(
+            r#"arr @ 0"#,
             Expr::ArrayAccess {
                 array: Box::new(Expr::VariableAccess("arr".to_string())),
-                index: Box::new(Expr::IntLiteral(0))
-            }
+                index: Box::new(Expr::IntLiteral(0)),
+            },
         );
     }
 
     #[test]
     fn arr_index_expr() {
         // Array indexing with expression
-        let mut program = Lexer::new(r#"arr @ 0 + 1"#);
-        let expr = Program::parse_expression(&mut program).unwrap();
-        assert_eq!(
-            expr,
+        assert_expression_equal(
+            r#"arr @ 0 + 1"#,
             Expr::ArrayAccess {
                 array: Box::new(Expr::VariableAccess("arr".to_string())),
                 index: Box::new(Expr::BinOp {
                     left: Box::new(Expr::IntLiteral(0)),
                     op: BinOp::Plus,
                     right: Box::new(Expr::IntLiteral(1)),
-                    parens: false
-                })
-            }
+                    parens: false,
+                }),
+            },
         );
     }
 
     #[test]
     fn arr_double_index() {
-        let mut program = Lexer::new(r#"arr @ arr @ 0"#);
-        let expr = Program::parse_expression(&mut program).unwrap();
-        assert_eq!(
-            expr,
+        assert_expression_equal(
+            r#"arr @ arr @ 0"#,
             Expr::ArrayAccess {
                 array: Box::new(Expr::VariableAccess("arr".to_string())),
                 index: Box::new(Expr::ArrayAccess {
                     array: Box::new(Expr::VariableAccess("arr".to_string())),
-                    index: Box::new(Expr::IntLiteral(0))
-                })
-            }
+                    index: Box::new(Expr::IntLiteral(0)),
+                }),
+            },
         );
     }
 
     #[test]
     fn binop_order_leq() {
-        let mut program = Lexer::new(r#"1 <= 2"#);
-        let expr = Program::parse_expression(&mut program).unwrap();
-        assert_eq!(
-            expr,
+        assert_expression_equal(
+            r#"1 <= 2"#,
             Expr::BinOp {
                 left: Box::new(Expr::IntLiteral(1)),
                 op: BinOp::LessThanOrEqual,
                 right: Box::new(Expr::IntLiteral(2)),
-                parens: false
-            }
+                parens: false,
+            },
         );
     }
 
     #[test]
     fn if_equals() {
-        let mut program = Lexer::new(
+        assert_expression_equal(
             r#"? a == b {
             1
         } : {
             2
         }"#,
-        );
-        let expr = Program::parse_expression(&mut program).unwrap();
-        assert_eq!(
-            expr,
             Expr::If {
                 condition: Box::new(Expr::BinOp {
                     left: Box::new(Expr::VariableAccess("a".to_string())),
                     op: BinOp::Equal,
                     right: Box::new(Expr::VariableAccess("b".to_string())),
-                    parens: false
+                    parens: false,
                 }),
                 true_block: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::IntLiteral(1)))]),
-                false_block: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::IntLiteral(2)))])
-            }
+                false_block: Stmt::Block(vec![Stmt::Expr(Box::new(Expr::IntLiteral(2)))]),
+            },
         );
     }
 
